@@ -705,7 +705,14 @@
             $('#modalTitle').text('Add New Professional');
             $('#passwordRequired').text('*');
             $('#passwordHelp').hide();
+            $('#passwordDefaultHelp').show();
+            $('#password').attr('required', false); // Make password optional for new professionals
             $('#professionalModal').modal('show');
+            
+            // Fix accessibility issue
+            $('#professionalModal').on('shown.bs.modal', function() {
+                $(this).attr('aria-hidden', 'false');
+            });
             
             // Ensure inputs work properly
             setTimeout(() => {
@@ -1391,7 +1398,7 @@
     function loadProfessionals() {
         console.log('👥 Loading professionals...');
         const tbody = $('#professionalsTableBody');
-        tbody.html('<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>');
+        tbody.html('<tr><td colspan="10" class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>');
         
         fetch(`${API_ROOT}/admin/professionals`)
             .then(response => {
@@ -1406,32 +1413,72 @@
         tbody.empty();
 
                 if (data.professionals && data.professionals.length > 0) {
+                    // Update statistics
+                    updateProfessionalStats(data.professionals);
+                    
                     data.professionals.forEach(prof => {
                         const fullName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim();
                         const statusClass = prof.is_active ? 'success' : 'secondary';
                         const statusText = prof.is_active ? 'Active' : 'Inactive';
                         
+            const consultationFee = prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A';
+            const district = prof.district || 'N/A';
+            
             const row = `
-                <tr>
-                    <td>${prof.id}</td>
-                                <td>${fullName || 'N/A'}</td>
-                                <td>${prof.specialization || 'N/A'}</td>
-                                <td>${prof.email || 'N/A'}</td>
-                                <td>${prof.phone || 'N/A'}</td>
-                                <td>${prof.experience_years || 0} years</td>
-                                <td><span class="badge badge-${statusClass}">${statusText}</span></td>
-                                <td>
-                                    <button class="btn btn-sm btn-primary" onclick="editProfessional(${prof.id})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                                    <button class="btn btn-sm btn-${prof.is_active ? 'warning' : 'success'}" 
-                                            onclick="toggleProfessionalStatus(${prof.id})" 
-                                            title="${prof.is_active ? 'Deactivate' : 'Activate'}">
-                                        <i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteProfessional(${prof.id})" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                <tr class="professional-row" data-id="${prof.id}">
+                    <td><strong>${prof.id}</strong></td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="mr-2">
+                                <i class="fas fa-user-circle text-primary"></i>
+                            </div>
+                            <div>
+                                <strong>${fullName || 'N/A'}</strong>
+                                <br><small class="text-muted">@${prof.username}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">${prof.specialization || 'N/A'}</span>
+                    </td>
+                    <td>
+                        <a href="mailto:${prof.email}" class="text-decoration-none">
+                            <i class="fas fa-envelope mr-1"></i>${prof.email || 'N/A'}
+                        </a>
+                    </td>
+                    <td>
+                        ${prof.phone ? `<a href="tel:${prof.phone}" class="text-decoration-none"><i class="fas fa-phone mr-1"></i>${prof.phone}</a>` : 'N/A'}
+                    </td>
+                    <td>
+                        <span class="badge badge-secondary">
+                            <i class="fas fa-calendar-alt mr-1"></i>${prof.experience_years || 0} years
+                        </span>
+                    </td>
+                    <td>
+                        <span class="text-success font-weight-bold">${consultationFee}</span>
+                    </td>
+                    <td>
+                        <i class="fas fa-map-marker-alt text-danger mr-1"></i>${district}
+                    </td>
+                    <td>
+                        <span class="badge badge-${statusClass} badge-pill">
+                            <i class="fas fa-${prof.is_active ? 'check-circle' : 'times-circle'} mr-1"></i>${statusText}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-sm btn-outline-primary" onclick="editProfessional(${prof.id})" title="Edit Professional">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-${prof.is_active ? 'warning' : 'success'}" 
+                                    onclick="toggleProfessionalStatus(${prof.id})" 
+                                    title="${prof.is_active ? 'Deactivate' : 'Activate'} Professional">
+                                <i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProfessional(${prof.id})" title="Delete Professional">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -1439,7 +1486,7 @@
         });
                     console.log(' Professionals loaded successfully');
                 } else {
-                    tbody.html('<tr><td colspan="8" class="text-center text-muted">No professionals found</td></tr>');
+                    tbody.html('<tr><td colspan="10" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
                 }
 
                 // Update DataTable if it exists
@@ -1451,13 +1498,31 @@
                 console.error(' Error loading professionals:', error);
                 tbody.html(`
                     <tr>
-                        <td colspan="8" class="text-center text-danger">
+                        <td colspan="10" class="text-center text-danger">
                             <i class="fas fa-exclamation-triangle"></i> Error loading professionals
                             <br><small>${error.message}</small>
                         </td>
                     </tr>
                 `);
             });
+    }
+
+    /**
+     * Update professional statistics
+     */
+    function updateProfessionalStats(professionals) {
+        const total = professionals.length;
+        const active = professionals.filter(p => p.is_active).length;
+        const inactive = total - active;
+        const avgExperience = total > 0 ? 
+            Math.round(professionals.reduce((sum, p) => sum + (p.experience_years || 0), 0) / total) : 0;
+        
+        $('#totalProfessionals').text(total);
+        $('#activeProfessionals').text(active);
+        $('#inactiveProfessionals').text(inactive);
+        $('#avgExperience').text(avgExperience);
+        
+        console.log('📊 Professional stats updated:', { total, active, inactive, avgExperience });
     }
 
     /**
@@ -1576,8 +1641,13 @@
         if (dataTables.bookings) {
             console.log('🔄 Updating DataTable with', tbody.find('tr').length, 'rows');
             try {
-            dataTables.bookings.clear().rows.add($(tbody).find('tr')).draw();
-                console.log(' DataTable updated successfully');
+                // Clear existing data and add new rows
+                dataTables.bookings.clear();
+                if (tbody.find('tr').length > 0) {
+                    dataTables.bookings.rows.add(tbody.find('tr').toArray());
+                }
+                dataTables.bookings.draw();
+                console.log('✅ DataTable updated successfully');
             } catch (error) {
                 console.error(' Error updating DataTable:', error);
                 console.log('🔄 Trying to destroy and recreate DataTable...');
@@ -2012,12 +2082,16 @@
         // Add password only for new professionals or if provided in edit mode
         const isEditMode = $('#modalTitle').text().includes('Edit');
         if (!isEditMode) {
-            professionalData.password = data.password;
+            // For new professionals, use provided password or default
+            const password = data.password && data.password.trim() ? data.password : 'password123';
+            professionalData.password = password;
+            console.log('Using password for new professional:', password);
         } else {
             // For edit mode, only include password if provided
             const password = data.password;
             if (password && password.trim()) {
                 professionalData.password = password;
+                console.log('Updating password for existing professional');
             }
         }
 
@@ -2043,15 +2117,15 @@
         .then(response => response.json())
         .then(data => {
             console.log(' Response data:', data);
-            if (data.success) {
-        Swal.fire({
-            title: 'Success!',
+            if (data.ok) {
+                Swal.fire({
+                    title: 'Success!',
                     text: isEditMode ? 'Professional updated successfully!' : 'Professional added successfully!',
-            icon: 'success',
-            timer: 2000
-        }).then(() => {
-            $('#professionalModal').modal('hide');
-            loadProfessionals();
+                    icon: 'success',
+                    timer: 2000
+                }).then(() => {
+                    $('#professionalModal').modal('hide');
+                    loadProfessionals();
                     resetProfessionalForm();
                 });
             } else {
@@ -2563,7 +2637,7 @@
         })
         .then(response => response.json())
         .then(data => {
-            if (data.success) {
+            if (data.ok) {
                 Swal.fire({
                     title: 'Success!',
                     text: data.message || 'Professional status updated.',
@@ -2667,6 +2741,11 @@
                     Swal.close();
                     $('#professionalModal').modal('show');
                     
+                    // Fix accessibility issue
+                    $('#professionalModal').on('shown.bs.modal', function() {
+                        $(this).attr('aria-hidden', 'false');
+                    });
+                    
                     // Ensure inputs work properly after modal is shown
                     setTimeout(() => {
                         ensureInputsWorking();
@@ -2707,9 +2786,9 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                Swal.fire('Deleted!', 'Professional has been deleted.', 'success');
-                loadProfessionals();
+                    if (data.ok) {
+                        Swal.fire('Deleted!', 'Professional has been deleted.', 'success');
+                        loadProfessionals();
                     } else {
                         Swal.fire('Error!', data.error || 'Failed to delete professional.', 'error');
                     }

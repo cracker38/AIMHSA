@@ -9,7 +9,7 @@ import sys
 import time
 import webbrowser
 import argparse
-from flask import Flask, request, jsonify, send_from_directory, render_template_string
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, send_file
 from flask_cors import CORS
 import json
 import numpy as np
@@ -21,6 +21,62 @@ import uuid
 import tempfile
 import pytesseract
 from werkzeug.utils import secure_filename
+
+# Database helper functions
+def load_history(conv_id):
+    """Load conversation history from database"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT role, content, ts FROM messages WHERE conv_id = ? ORDER BY ts", (conv_id,))
+        rows = cur.fetchall()
+        return [{"role": row[0], "content": row[1], "timestamp": row[2]} for row in rows]
+    except Exception as e:
+        app.logger.error(f"Error loading history: {e}")
+        return []
+    finally:
+        conn.close()
+
+def load_attachments(conv_id):
+    """Load attachments for a conversation"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT filename, text FROM attachments WHERE conv_id = ?", (conv_id,))
+        rows = cur.fetchall()
+        return [{"filename": row[0], "text": row[1]} for row in rows]
+    except Exception as e:
+        app.logger.error(f"Error loading attachments: {e}")
+        return []
+    finally:
+        conn.close()
+
+def list_conversations(owner_key):
+    """List conversations for a user"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT conv_id, preview, ts FROM conversations WHERE owner_key = ? ORDER BY ts DESC", (owner_key,))
+        rows = cur.fetchall()
+        return [{"id": row[0], "preview": row[1], "timestamp": row[2]} for row in rows]
+    except Exception as e:
+        app.logger.error(f"Error listing conversations: {e}")
+        return []
+    finally:
+        conn.close()
+
+def create_conversation(owner_key, preview="New chat"):
+    """Create a new conversation"""
+    conv_id = str(uuid.uuid4())
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute("INSERT INTO conversations (conv_id, owner_key, preview, ts) VALUES (?, ?, ?, ?)", 
+                    (conv_id, owner_key, preview, time.time()))
+        conn.commit()
+        return conv_id
+    except Exception as e:
+        app.logger.error(f"Error creating conversation: {e}")
+        conn.rollback()
+        return str(uuid.uuid4())  # Fallback
+    finally:
+        conn.close()
 
 # Load environment variables
 load_dotenv()
@@ -223,6 +279,10 @@ def login():
     """Serve login page"""
     return send_from_directory('chatbot', 'login.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_file('favicon.svg', mimetype='image/svg+xml')
+
 @app.route('/register')
 @app.route('/register.html')
 def register():
@@ -354,61 +414,151 @@ CONTEXT:
 
 @app.route('/api/register', methods=['POST'])
 def api_register():
-    """User registration endpoint"""
+    """
+    POST /register
+    JSON: { "username": "...", "email": "...", "fullname": "...", "telephone": "...", "province": "...", "district": "...", "password": "..." }
+    """
     try:
         data = request.get_json(force=True)
     except Exception:
         return jsonify({"error": "Invalid JSON"}), 400
     
+    # Extract and validate all fields
     username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip()
+    fullname = (data.get("fullname") or "").strip()
+    telephone = (data.get("telephone") or "").strip()
+    province = (data.get("province") or "").strip()
+    district = (data.get("district") or "").strip()
     password = (data.get("password") or "")
     
-    if not username or not password:
-        return jsonify({"error": "username and password required"}), 400
+    # Collect validation errors
+    errors = {}
     
-    pw_hash = generate_password_hash(password)
+    # Validate required fields
+    if not username:
+        errors['username'] = 'Username is required'
+    if not email:
+        errors['email'] = 'Email is required'
+    if not fullname:
+        errors['fullname'] = 'Full name is required'
+    if not telephone:
+        errors['telephone'] = 'Phone number is required'
+    if not province:
+        errors['province'] = 'Province is required'
+    if not district:
+        errors['district'] = 'District is required'
+    if not password:
+        errors['password'] = 'Password is required'
+    
+    # Email validation
+    import re
+    if email:
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, email):
+            errors['email'] = 'Please enter a valid email address'
+    
+    # Phone validation (Rwanda format)
+    if telephone:
+        phone_pattern = r'^(\+250|0)[0-9]{9}$'
+        if not re.match(phone_pattern, telephone):
+            errors['telephone'] = 'Please enter a valid Rwanda phone number (+250XXXXXXXXX or 07XXXXXXXX)'
+    
+    # Username validation
+    if username:
+        if len(username) < 3:
+            errors['username'] = 'Username must be at least 3 characters long'
+        elif len(username) > 20:
+            errors['username'] = 'Username must be no more than 20 characters long'
+        elif not re.match(r'^[a-zA-Z0-9_]+$', username):
+            errors['username'] = 'Username can only contain letters, numbers, and underscores'
+    
+    # Password validation
+    if password:
+        if len(password) < 6:
+            errors['password'] = 'Password must be at least 6 characters long'
+        elif len(password) > 128:
+            errors['password'] = 'Password must be no more than 128 characters long'
+    
+    # Return validation errors if any
+    if errors:
+        return jsonify({"errors": errors, "message": "Please correct the errors below"}), 400
+
     conn = sqlite3.connect(DB_FILE)
     try:
-        try:
-            conn.execute(
-                "INSERT INTO users (username, password_hash, created_ts) VALUES (?, ?, ?)",
-                (username, pw_hash, time.time()),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            return jsonify({"error": "username exists"}), 409
+        # Check if username already exists
+        cur = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,))
+        if cur.fetchone():
+            return jsonify({"errors": {"username": "This username is already taken. Please choose another."}, "message": "Please correct the errors below"}), 409
+        
+        # Check if email already exists
+        cur = conn.execute("SELECT 1 FROM users WHERE email = ?", (email,))
+        if cur.fetchone():
+            return jsonify({"errors": {"email": "This email is already registered. Please use a different email."}, "message": "Please correct the errors below"}), 409
+        
+        # Check if telephone already exists
+        cur = conn.execute("SELECT 1 FROM users WHERE telephone = ?", (telephone,))
+        if cur.fetchone():
+            return jsonify({"errors": {"telephone": "This phone number is already registered. Please use a different phone number."}, "message": "Please correct the errors below"}), 409
+        
+        # All validations passed, create the user
+        pw_hash = generate_password_hash(password)
+        conn.execute(
+            "INSERT INTO users (username, email, fullname, telephone, province, district, password_hash, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (username, email, fullname, telephone, province, district, pw_hash, time.time()),
+        )
+        conn.commit()
+        
+    except sqlite3.IntegrityError as e:
+        # Fallback error handling in case of race conditions
+        if "username" in str(e):
+            return jsonify({"errors": {"username": "This username is already taken. Please choose another."}, "message": "Please correct the errors below"}), 409
+        elif "email" in str(e):
+            return jsonify({"errors": {"email": "This email is already registered. Please use a different email."}, "message": "Please correct the errors below"}), 409
+        elif "telephone" in str(e):
+            return jsonify({"errors": {"telephone": "This phone number is already registered. Please use a different phone number."}, "message": "Please correct the errors below"}), 409
+        else:
+            return jsonify({"error": "Registration failed. Please try again."}), 409
+    except Exception as e:
+        app.logger.error(f"Registration error: {e}")
+        return jsonify({"error": "Registration failed. Please try again."}), 500
     finally:
         conn.close()
     
-    return jsonify({"ok": True, "account": username})
+    return jsonify({"ok": True, "account": username, "message": "Account created successfully"})
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    """User login endpoint"""
+    """
+    POST /login
+    JSON: { "email": "...", "password": "..." }
+    """
     try:
         data = request.get_json(force=True)
     except Exception:
         return jsonify({"error": "Invalid JSON"}), 400
-    
-    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip()
     password = (data.get("password") or "")
+    if not email or not password:
+        return jsonify({"error": "email and password required"}), 400
     
-    if not username or not password:
-        return jsonify({"error": "username and password required"}), 400
+    # Email validation
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return jsonify({"error": "Invalid email format"}), 400
     
     conn = sqlite3.connect(DB_FILE)
     try:
-        cur = conn.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
+        cur = conn.execute("SELECT username, password_hash FROM users WHERE email = ?", (email,))
         row = cur.fetchone()
         if not row:
             return jsonify({"error": "invalid credentials"}), 401
-        
-        stored = row[0]
+        username, stored = row
         if not check_password_hash(stored, password):
             return jsonify({"error": "invalid credentials"}), 401
     finally:
         conn.close()
-    
     return jsonify({"ok": True, "account": username})
 
 @app.route('/api/history')
@@ -509,6 +659,1146 @@ def test_ollama_connection():
         print(f"❌ Ollama connection failed: {e}")
         print("💡 Make sure Ollama is running: ollama serve")
         return False
+
+@app.route('/history')
+def history():
+    """
+    Query params: ?id=<conv_id>
+    Returns: { "id": "<conv_id>", "history": [ {role, content}, ... ], "attachments": [ {filename,text}, ... ] }
+    """
+    conv_id = request.args.get("id")
+    password = (request.args.get("password") or "").strip()
+    if not conv_id:
+        return jsonify({"error": "Missing 'id' parameter"}), 400
+    try:
+        # if conversation is archived and locked, require password to view history
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.execute("SELECT IFNULL(archived,0), archive_pw_hash FROM conversations WHERE conv_id = ?", (conv_id,))
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        if row and int(row[0]) == 1 and row[1]:
+            if not password or not check_password_hash(row[1], password):
+                return jsonify({"error": "password required"}), 403
+        hist = load_history(conv_id)
+        atts = load_attachments(conv_id)
+        return jsonify({"id": conv_id, "history": hist, "attachments": atts})
+    except Exception as e:
+        app.logger.exception("history endpoint failed")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/conversations')
+@app.route('/api/conversations')
+def get_conversations_endpoint():
+    """
+    GET /conversations?account=<required>
+    Returns: { "conversations": [ {id, preview, timestamp}, ... ] }
+    """
+    account = (request.args.get("account") or "").strip()
+    if not account:
+        return jsonify({"error": "Account required to list conversations"}), 403
+    key = f"acct:{account}"
+    try:
+        rows = list_conversations(key)
+        return jsonify({"conversations": rows})
+    except Exception as e:
+        app.logger.exception("failed to list conversations")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/conversations', methods=['POST'])
+@app.route('/api/conversations', methods=['POST'])
+def create_conversations_endpoint():
+    """
+    POST /conversations
+    Body JSON: { "account": "<required account id>" }
+    Returns: { "id": "<conv_id>", "new": true }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+    except Exception:
+        data = {}
+    account = (data.get("account") or "").strip()
+    if not account:
+        return jsonify({"error": "Account required to create server-backed conversations"}), 403
+    key = f"acct:{account}"
+    conv_id = create_conversation(owner_key=key, preview="New chat")
+    return jsonify({"id": conv_id, "new": True})
+
+@app.route('/conversations/archived')
+@app.route('/api/conversations/archived')
+def get_archived_conversations_endpoint():
+    """
+    GET /conversations/archived?account=<required>
+    Returns archived conversations for this account
+    """
+    account = (request.args.get("account") or "").strip()
+    if not account:
+        return jsonify({"error": "Account required to list conversations"}), 403
+    key = f"acct:{account}"
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute(
+            "SELECT conv_id, preview, ts, CASE WHEN archive_pw_hash IS NULL OR archive_pw_hash = '' THEN 0 ELSE 1 END AS locked FROM conversations WHERE owner_key = ? AND IFNULL(archived,0) = 1 ORDER BY ts DESC",
+            (key,),
+        )
+        rows = cur.fetchall()
+        items = [{"id": r[0], "preview": r[1] or "New chat", "timestamp": r[2], "locked": bool(r[3])} for r in rows]
+        return jsonify({"conversations": items})
+    except Exception as e:
+        app.logger.exception("failed to list archived conversations")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/conversations/archive', methods=['POST'])
+@app.route('/api/conversations/archive', methods=['POST'])
+def archive_conversation():
+    """
+    POST /conversations/archive
+    JSON: { "account": "...", "id": "<conv_id>", "archived": true|false }
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    account = (data.get("account") or "").strip()
+    conv_id = (data.get("id") or "").strip()
+    archived = bool(data.get("archived", True))
+    password = (data.get("password") or "").strip()
+    if not account or not conv_id:
+        return jsonify({"error": "account and id required"}), 400
+    owner_key = f"acct:{account}"
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT owner_key FROM conversations WHERE conv_id = ?", (conv_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "conversation not found"}), 404
+        if (row[0] or "") != owner_key:
+            return jsonify({"error": "forbidden"}), 403
+        # when archiving, password is REQUIRED; when unarchiving, password MUST match
+        if archived:
+            if not password:
+                return jsonify({"error": "password required to archive"}), 400
+            pw_hash = generate_password_hash(password)
+            conn.execute("UPDATE conversations SET archive_pw_hash = ? WHERE conv_id = ?", (pw_hash, conv_id))
+        else:
+            cur = conn.execute("SELECT archive_pw_hash FROM conversations WHERE conv_id = ?", (conv_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                if not password or not check_password_hash(row[0], password):
+                    return jsonify({"error": "invalid password"}), 403
+            # clear hash on successful unarchive
+            conn.execute("UPDATE conversations SET archive_pw_hash = NULL WHERE conv_id = ?", (conv_id,))
+        conn.execute("UPDATE conversations SET archived = ? WHERE conv_id = ?", (archived, conv_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/professional/login', methods=['POST'])
+def professional_login():
+    """Professional login"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    # Accept either username or email for convenience
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip()
+    password = (data.get("password") or "")
+    
+    if (not username and not email) or not password:
+        return jsonify({"error": "username/email and password required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if username:
+            cur = conn.execute(
+                "SELECT id, password_hash, first_name, last_name, username, email FROM professionals WHERE username = ? AND is_active = 1",
+                (username,)
+            )
+        else:
+            cur = conn.execute(
+                "SELECT id, password_hash, first_name, last_name, username, email FROM professionals WHERE email = ? AND is_active = 1",
+                (email,)
+            )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "invalid credentials"}), 401
+        
+        prof_id, stored_hash, first_name, last_name, uname, uemail = row
+        if not check_password_hash(stored_hash, password):
+            return jsonify({"error": "invalid credentials"}), 401
+        
+        return jsonify({
+            "ok": True, 
+            "professional_id": prof_id,
+            "name": f"{first_name} {last_name}",
+            "username": uname,
+            "email": uemail
+        })
+    finally:
+        conn.close()
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    """Logout endpoint for all user types"""
+    try:
+        # Clear any server-side session data if needed
+        # For now, we rely on client-side localStorage clearing
+        
+        return jsonify({
+            "ok": True,
+            "message": "Logged out successfully"
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": f"Logout error: {str(e)}"
+        }), 500
+
+@app.route('/admin/login', methods=['POST'])
+def admin_login():
+    """Admin login - redirects to dashboard"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "")
+    
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT id, password_hash, email, role FROM admin_users WHERE username = ?", (username,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "invalid credentials"}), 401
+        
+        admin_id, stored_hash, email, role = row
+        if not check_password_hash(stored_hash, password):
+            return jsonify({"error": "invalid credentials"}), 401
+        
+        # Create admin session token
+        import secrets
+        session_token = secrets.token_urlsafe(32)
+        
+        return jsonify({
+            "ok": True,
+            "redirect": "/admin_dashboard.html",
+            "admin_id": admin_id,
+            "username": username,
+            "email": email,
+            "role": role,
+            "session_token": session_token
+        })
+    finally:
+        conn.close()
+
+@app.route('/forgot_password', methods=['POST'])
+def forgot_password():
+    """
+    POST /forgot_password
+    JSON: { "email": "..." }
+    Creates a short-lived reset token and sends it via email.
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    email = (data.get("email") or "").strip()
+    if not email:
+        return jsonify({"error": "email required"}), 400
+    
+    # Email validation
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return jsonify({"error": "Invalid email format"}), 400
+    
+    # verify user exists
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT username, fullname FROM users WHERE email = ?", (email,))
+        user_row = cur.fetchone()
+        if not user_row:
+            # do not reveal whether the user exists; still return ok
+            return jsonify({"ok": True, "message": "If the email exists, a reset code has been sent."})
+        
+        username, fullname = user_row
+        
+        # Check if there's already an active reset token for this user
+        cur = conn.execute(
+            "SELECT id FROM password_resets WHERE username = ? AND used = 0 AND expires_ts > ?",
+            (username, time.time())
+        )
+        existing_token = cur.fetchone()
+        
+        if existing_token:
+            # Invalidate the existing token
+            conn.execute("UPDATE password_resets SET used = 1 WHERE id = ?", (existing_token[0],))
+        
+        # Generate new reset token
+        token = uuid.uuid4().hex[:6].upper()  # 6-char code
+        expires = time.time() + 15 * 60  # 15 minutes
+        
+        # Store the reset token
+        conn.execute(
+            "INSERT INTO password_resets (username, token, expires_ts, used) VALUES (?, ?, ?, 0)",
+            (username, token, expires),
+        )
+        conn.commit()
+        
+        # For demo purposes, return the token instead of sending email
+        return jsonify({
+            "ok": True, 
+            "token": token, 
+            "expires_in": 900, 
+            "message": "Password reset code generated. Use this code for testing.",
+            "user_info": {
+                "username": username,
+                "fullname": fullname
+            }
+        })
+            
+    finally:
+        conn.close()
+
+@app.route('/reset_password', methods=['POST'])
+def reset_password():
+    """
+    POST /reset_password
+    JSON: { "email": "...", "token": "ABC123", "new_password": "..." }
+    Validates token and updates the user's password.
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    email = (data.get("email") or "").strip()
+    token = (data.get("token") or "").strip().upper()
+    new_password = (data.get("new_password") or "")
+    if not email or not token or not new_password:
+        return jsonify({"error": "email, token, and new_password required"}), 400
+    if len(new_password) < 6:
+        return jsonify({"error": "new_password too short"}), 400
+    
+    # Email validation
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, email):
+        return jsonify({"error": "Invalid email format"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # First get the username from email
+        cur = conn.execute("SELECT username FROM users WHERE email = ?", (email,))
+        user_row = cur.fetchone()
+        if not user_row:
+            return jsonify({"error": "invalid email"}), 400
+        username = user_row[0]
+        
+        # Then validate the token
+        cur = conn.execute(
+            "SELECT id, expires_ts, used FROM password_resets WHERE username = ? AND token = ?",
+            (username, token),
+        )
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "invalid token"}), 400
+        reset_id, expires_ts, used = row
+        if used:
+            return jsonify({"error": "token already used"}), 400
+        if time.time() > float(expires_ts):
+            return jsonify({"error": "token expired"}), 400
+        # Update password and mark token used
+        pw_hash = generate_password_hash(new_password)
+        conn.execute("UPDATE users SET password_hash = ? WHERE username = ?", (pw_hash, username))
+        conn.execute("UPDATE password_resets SET used = 1 WHERE id = ?", (reset_id,))
+        conn.commit()
+        
+        # Get user info for confirmation
+        cur = conn.execute("SELECT email, fullname FROM users WHERE username = ?", (username,))
+        user_info = cur.fetchone()
+        
+        return jsonify({
+            "ok": True, 
+            "message": "Password reset successfully. You can now login with your new password.",
+            "user_info": {
+                "username": username,
+                "email": user_info[0] if user_info else email,
+                "fullname": user_info[1] if user_info else "User"
+            }
+        })
+    finally:
+        conn.close()
+
+@app.route('/clear_chat', methods=['POST'])
+def clear_chat():
+    """Clear messages and attachments for a conversation."""
+    data = request.get_json(force=True)
+    conv_id = data.get("id")
+    if not conv_id:
+        return jsonify({"error": "Missing conversation id"}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Delete messages and attachments for this conversation
+        conn.execute("DELETE FROM messages WHERE conv_id = ?", (conv_id,))
+        conn.execute("DELETE FROM attachments WHERE conv_id = ?", (conv_id,))
+        # Reset conversation preview
+        conn.execute(
+            "UPDATE conversations SET preview = ? WHERE conv_id = ?",
+            ("New chat", conv_id),
+        )
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+# Admin endpoints for professional management
+@app.route('/admin/professionals', methods=['POST'])
+def create_professional():
+    """Create a new professional"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    required_fields = ['username', 'first_name', 'last_name', 'email', 'specialization', 'expertise_areas']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+    
+    # Password is required but can be default
+    password = data.get('password', 'password123')
+    
+    # Hash password
+    password_hash = generate_password_hash(password)
+    
+    # Prepare expertise areas as JSON
+    expertise_areas = json.dumps(data.get('expertise_areas', []))
+    languages = json.dumps(data.get('languages', ['english']))
+    qualifications = json.dumps(data.get('qualifications', []))
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Check if username already exists
+        existing_username = conn.execute(
+            "SELECT username FROM professionals WHERE username = ?", 
+            (data['username'],)
+        ).fetchone()
+        
+        if existing_username:
+            return jsonify({
+                "error": "Username already exists", 
+                "details": f"Username '{data['username']}' is already taken. Please choose a different username."
+            }), 409
+        
+        # Check if email already exists
+        existing_email = conn.execute(
+            "SELECT email FROM professionals WHERE email = ?", 
+            (data['email'],)
+        ).fetchone()
+        
+        if existing_email:
+            return jsonify({
+                "error": "Email already exists", 
+                "details": f"Email '{data['email']}' is already registered. Please use a different email."
+            }), 409
+        
+        cursor = conn.execute("""
+            INSERT INTO professionals 
+            (username, password_hash, first_name, last_name, email, phone,
+             specialization, expertise_areas, languages, qualifications, district,
+             consultation_fee, experience_years, bio, created_ts, updated_ts, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        """, (
+            data['username'], password_hash, data['first_name'], data['last_name'],
+            data['email'], data.get('phone'), data['specialization'], expertise_areas,
+            languages, qualifications, data.get('district'), data.get('consultation_fee'),
+            data.get('experience_years', 0), data.get('bio'), time.time(), time.time()
+        ))
+        conn.commit()
+        
+        # Get the created professional ID
+        prof_id = cursor.lastrowid
+        
+        return jsonify({
+            "ok": True, 
+            "message": "Professional created successfully",
+            "professional": {"id": prof_id}
+        })
+    except sqlite3.IntegrityError as e:
+        return jsonify({
+            "error": "Database constraint violation", 
+            "details": str(e)
+        }), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals', methods=['GET'])
+def list_professionals():
+    """List all professionals with filtering"""
+    specialization = request.args.get('specialization')
+    is_active = request.args.get('is_active')
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = "SELECT * FROM professionals"
+        params = []
+        conditions = []
+        
+        if is_active is not None:
+            conditions.append("is_active = ?")
+            params.append(is_active)
+        
+        if specialization:
+            conditions.append("specialization = ?")
+            params.append(specialization)
+        
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        query += " ORDER BY created_ts DESC"
+        
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+        
+        professionals = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            prof = dict(zip(columns, row))
+            # Parse JSON fields with error handling
+            try:
+                prof['expertise_areas'] = json.loads(prof.get('expertise_areas') or '[]')
+            except (json.JSONDecodeError, TypeError):
+                prof['expertise_areas'] = []
+            
+            try:
+                prof['languages'] = json.loads(prof.get('languages') or '[]')
+            except (json.JSONDecodeError, TypeError):
+                prof['languages'] = ['english']
+            
+            try:
+                prof['qualifications'] = json.loads(prof.get('qualifications') or '[]')
+            except (json.JSONDecodeError, TypeError):
+                prof['qualifications'] = []
+            
+            # Note: availability_schedule column doesn't exist in database schema
+            
+            professionals.append(prof)
+        
+        return jsonify({"professionals": professionals})
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals/<int:prof_id>', methods=['PUT'])
+def update_professional(prof_id: int):
+    """Update a professional's information"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Check if professional exists
+        existing = conn.execute("SELECT id FROM professionals WHERE id = ?", (prof_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Professional not found"}), 404
+        
+        # Build update query dynamically
+        update_fields = []
+        params = []
+        
+        # Handle password update
+        if data.get('password'):
+            password_hash = generate_password_hash(data['password'])
+            update_fields.append("password_hash = ?")
+            params.append(password_hash)
+        
+        # Handle other fields
+        updatable_fields = [
+            'first_name', 'last_name', 'email', 'phone',
+            'specialization', 'district', 'consultation_fee',
+            'experience_years', 'bio'
+        ]
+        
+        for field in updatable_fields:
+            if field in data:
+                update_fields.append(f"{field} = ?")
+                params.append(data[field])
+        
+        # Handle JSON fields
+        if 'expertise_areas' in data:
+            update_fields.append("expertise_areas = ?")
+            params.append(json.dumps(data['expertise_areas']))
+        
+        if 'languages' in data:
+            update_fields.append("languages = ?")
+            params.append(json.dumps(data['languages']))
+        
+        if 'qualifications' in data:
+            update_fields.append("qualifications = ?")
+            params.append(json.dumps(data['qualifications']))
+        
+        # Note: availability_schedule column doesn't exist in database schema
+        
+        if not update_fields:
+            return jsonify({"error": "No fields to update"}), 400
+        
+        # Add updated timestamp
+        update_fields.append("updated_ts = ?")
+        params.append(time.time())
+        
+        # Add prof_id to params
+        params.append(prof_id)
+        
+        query = f"UPDATE professionals SET {', '.join(update_fields)} WHERE id = ?"
+        conn.execute(query, params)
+        conn.commit()
+        
+        return jsonify({"ok": True, "message": "Professional updated successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals/<int:prof_id>', methods=['DELETE'])
+def delete_professional(prof_id: int):
+    """Delete a professional"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Check if professional exists
+        existing = conn.execute("SELECT first_name, last_name FROM professionals WHERE id = ?", (prof_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Professional not found"}), 404
+        
+        first_name, last_name = existing
+        
+        # Check for active bookings
+        active_bookings = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ? AND booking_status IN ('pending', 'confirmed')",
+            (prof_id,)
+        ).fetchone()[0]
+        
+        if active_bookings > 0:
+            return jsonify({
+                "error": "Cannot delete professional with active bookings",
+                "details": f"Professional {first_name} {last_name} has {active_bookings} active booking(s). Please handle these bookings first."
+            }), 409
+        
+        # Delete the professional
+        conn.execute("DELETE FROM professionals WHERE id = ?", (prof_id,))
+        conn.commit()
+        
+        return jsonify({"ok": True, "message": f"Professional {first_name} {last_name} deleted successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals/<int:prof_id>/status', methods=['POST'])
+def toggle_professional_status(prof_id: int):
+    """Toggle professional active status"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Get current status
+        current = conn.execute("SELECT is_active FROM professionals WHERE id = ?", (prof_id,)).fetchone()
+        if not current:
+            return jsonify({"error": "Professional not found"}), 404
+        
+        is_active = current[0]
+        new_status = 0 if is_active else 1
+        
+        conn.execute("UPDATE professionals SET is_active = ?, updated_ts = ? WHERE id = ?", 
+                    (new_status, time.time(), prof_id))
+        conn.commit()
+        
+        return jsonify({"ok": True, "is_active": bool(new_status)})
+    finally:
+        conn.close()
+
+@app.route('/admin/bookings', methods=['GET'])
+def list_bookings():
+    """List all automated bookings with user and professional information"""
+    status = request.args.get('status')
+    risk_level = request.args.get('risk_level')
+    limit = int(request.args.get('limit', 100))
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Get all bookings with user and professional information
+        query = """
+            SELECT 
+                ab.*,
+                u.fullname as user_fullname,
+                u.email as user_email,
+                u.telephone as user_phone,
+                u.province as user_province,
+                u.district as user_district,
+                (u.district || ', ' || u.province) as user_location,
+                u.created_ts as user_created_ts,
+                p.first_name as professional_first_name,
+                p.last_name as professional_last_name,
+                p.specialization as professional_specialization,
+                p.email as professional_email,
+                p.phone as professional_phone,
+                p.experience_years as professional_experience,
+                (p.first_name || ' ' || p.last_name) as professional_name
+            FROM automated_bookings ab
+            LEFT JOIN users u ON ab.user_account = u.username
+            LEFT JOIN professionals p ON ab.professional_id = p.id
+        """
+        params = []
+        conditions = []
+        
+        if status:
+            conditions.append("ab.booking_status = ?")
+            params.append(status)
+        
+        if risk_level:
+            conditions.append("ab.risk_level = ?")
+            params.append(risk_level)
+        
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        
+        query += " ORDER BY ab.created_ts DESC LIMIT ?"
+        params.append(limit)
+        
+        cur = conn.execute(query, params)
+        rows = cur.fetchall()
+        
+        bookings = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            booking = dict(zip(columns, row))
+            bookings.append(booking)
+        
+        return jsonify({"bookings": bookings})
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals/check-availability', methods=['GET'])
+def check_professional_availability():
+    """Check if username or email is available"""
+    username = request.args.get('username')
+    email = request.args.get('email')
+    
+    if not username and not email:
+        return jsonify({"error": "username or email required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        result = {"username_available": True, "email_available": True}
+        
+        if username:
+            existing_username = conn.execute(
+                "SELECT username FROM professionals WHERE username = ?", 
+                (username,)
+            ).fetchone()
+            result["username_available"] = not existing_username
+        
+        if email:
+            existing_email = conn.execute(
+                "SELECT email FROM professionals WHERE email = ?", 
+                (email,)
+            ).fetchone()
+            result["email_available"] = not existing_email
+        
+        return jsonify(result)
+    finally:
+        conn.close()
+
+# Additional admin endpoints for dashboard functionality
+@app.route('/admin/risk-assessments', methods=['GET'])
+def list_risk_assessments():
+    """List risk assessments for admin dashboard"""
+    limit = int(request.args.get('limit', 100))
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = """
+            SELECT ra.*, u.fullname as user_fullname, u.email as user_email
+            FROM risk_assessments ra
+            LEFT JOIN conversations c ON ra.conv_id = c.conv_id
+            LEFT JOIN users u ON c.owner_key = u.username
+            ORDER BY ra.assessment_timestamp DESC LIMIT ?
+        """
+        
+        cur = conn.execute(query, (limit,))
+        rows = cur.fetchall()
+        
+        assessments = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            assessment = dict(zip(columns, row))
+            assessments.append(assessment)
+        
+        return jsonify({"assessments": assessments})
+    finally:
+        conn.close()
+
+@app.route('/monitor/risk-stats', methods=['GET'])
+def get_risk_stats():
+    """Get risk statistics for monitoring"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Get risk level counts
+        cur = conn.execute("""
+            SELECT risk_level, COUNT(*) as count
+            FROM risk_assessments
+            WHERE assessment_timestamp > ? 
+            GROUP BY risk_level
+        """, (time.time() - 7 * 24 * 60 * 60,))  # Last 7 days
+        
+        risk_counts = {}
+        for row in cur.fetchall():
+            risk_counts[row[0]] = row[1]
+        
+        # Get total assessments
+        total_assessments = conn.execute("SELECT COUNT(*) FROM risk_assessments").fetchone()[0]
+        
+        return jsonify({
+            "risk_counts": risk_counts,
+            "total_assessments": total_assessments,
+            "period": "last_7_days"
+        })
+    finally:
+        conn.close()
+
+@app.route('/monitor/recent-assessments', methods=['GET'])
+def get_recent_assessments():
+    """Get recent risk assessments"""
+    limit = int(request.args.get('limit', 10))
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = """
+            SELECT ra.*, u.fullname as user_fullname, u.email as user_email
+            FROM risk_assessments ra
+            LEFT JOIN conversations c ON ra.conv_id = c.conv_id
+            LEFT JOIN users u ON c.owner_key = u.username
+            ORDER BY ra.assessment_timestamp DESC LIMIT ?
+        """
+        
+        cur = conn.execute(query, (limit,))
+        rows = cur.fetchall()
+        
+        assessments = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            assessment = dict(zip(columns, row))
+            assessments.append(assessment)
+        
+        return jsonify({"assessments": assessments})
+    finally:
+        conn.close()
+
+@app.route('/notifications', methods=['GET'])
+def get_notifications():
+    """Get notifications for admin dashboard"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Get professional notifications
+        cur = conn.execute("""
+            SELECT pn.*, p.first_name, p.last_name, ab.user_account
+            FROM professional_notifications pn
+            LEFT JOIN professionals p ON pn.professional_id = p.id
+            LEFT JOIN automated_bookings ab ON pn.booking_id = ab.booking_id
+            ORDER BY pn.created_ts DESC LIMIT 50
+        """)
+        
+        rows = cur.fetchall()
+        
+        notifications = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            notification = dict(zip(columns, row))
+            notifications.append(notification)
+        
+        return jsonify({"notifications": notifications})
+    finally:
+        conn.close()
+
+# Professional Dashboard Endpoints
+@app.route('/professional/profile', methods=['GET'])
+def get_professional_profile():
+    """Get current professional's profile"""
+    # Get professional from session or token
+    professional_id = request.args.get('id')
+    if not professional_id:
+        return jsonify({"error": "Professional ID required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT * FROM professionals WHERE id = ?", (professional_id,))
+        row = cur.fetchone()
+        
+        if not row:
+            return jsonify({"error": "Professional not found"}), 404
+        
+        columns = [desc[0] for desc in cur.description]
+        professional = dict(zip(columns, row))
+        
+        # Parse JSON fields
+        try:
+            professional['expertise_areas'] = json.loads(professional.get('expertise_areas') or '[]')
+        except (json.JSONDecodeError, TypeError):
+            professional['expertise_areas'] = []
+        
+        try:
+            professional['languages'] = json.loads(professional.get('languages') or '[]')
+        except (json.JSONDecodeError, TypeError):
+            professional['languages'] = ['english']
+        
+        try:
+            professional['qualifications'] = json.loads(professional.get('qualifications') or '[]')
+        except (json.JSONDecodeError, TypeError):
+            professional['qualifications'] = []
+        
+        return jsonify({"professional": professional})
+    finally:
+        conn.close()
+
+@app.route('/professional/dashboard-stats', methods=['GET'])
+def get_professional_dashboard_stats():
+    """Get professional dashboard statistics"""
+    professional_id = request.args.get('id')
+    if not professional_id:
+        return jsonify({"error": "Professional ID required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Get total sessions
+        total_sessions = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ?",
+            (professional_id,)
+        ).fetchone()[0]
+        
+        # Get pending sessions
+        pending_sessions = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ? AND booking_status = 'pending'",
+            (professional_id,)
+        ).fetchone()[0]
+        
+        # Get confirmed sessions
+        confirmed_sessions = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ? AND booking_status = 'confirmed'",
+            (professional_id,)
+        ).fetchone()[0]
+        
+        # Get high risk sessions
+        high_risk_sessions = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ? AND risk_level IN ('high', 'critical')",
+            (professional_id,)
+        ).fetchone()[0]
+        
+        # Get today's sessions
+        today_start = time.time() - (time.time() % 86400)  # Start of today
+        today_sessions = conn.execute(
+            "SELECT COUNT(*) FROM automated_bookings WHERE professional_id = ? AND created_ts >= ?",
+            (professional_id, today_start)
+        ).fetchone()[0]
+        
+        # Get unread notifications
+        unread_notifications = conn.execute(
+            "SELECT COUNT(*) FROM professional_notifications WHERE professional_id = ? AND is_read = 0",
+            (professional_id,)
+        ).fetchone()[0]
+        
+        return jsonify({
+            "total_sessions": total_sessions,
+            "pending_sessions": pending_sessions,
+            "confirmed_sessions": confirmed_sessions,
+            "high_risk_sessions": high_risk_sessions,
+            "today_sessions": today_sessions,
+            "unread_notifications": unread_notifications
+        })
+    finally:
+        conn.close()
+
+@app.route('/professional/sessions', methods=['GET'])
+def get_professional_sessions():
+    """Get professional's assigned sessions"""
+    professional_id = request.args.get('id')
+    if not professional_id:
+        return jsonify({"error": "Professional ID required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = """
+            SELECT 
+                ab.*,
+                u.fullname as user_fullname,
+                u.email as user_email,
+                u.telephone as user_phone,
+                u.province as user_province,
+                u.district as user_district,
+                (u.district || ', ' || u.province) as user_location
+            FROM automated_bookings ab
+            LEFT JOIN users u ON ab.user_account = u.username
+            WHERE ab.professional_id = ?
+            ORDER BY ab.created_ts DESC
+        """
+        
+        cur = conn.execute(query, (professional_id,))
+        rows = cur.fetchall()
+        
+        sessions = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            session = dict(zip(columns, row))
+            sessions.append(session)
+        
+        return jsonify({"sessions": sessions})
+    finally:
+        conn.close()
+
+@app.route('/professional/sessions/<booking_id>/status', methods=['PUT'])
+def update_session_status(booking_id: str):
+    """Update session status (accept/decline)"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    status = data.get('status')  # 'accepted' or 'declined'
+    if status not in ['accepted', 'declined']:
+        return jsonify({"error": "Invalid status"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Update booking status
+        conn.execute(
+            "UPDATE automated_bookings SET booking_status = ?, updated_ts = ? WHERE booking_id = ?",
+            (status, time.time(), booking_id)
+        )
+        conn.commit()
+        
+        return jsonify({"ok": True, "message": f"Session {status} successfully"})
+    finally:
+        conn.close()
+
+@app.route('/professional/sessions/<booking_id>/notes', methods=['POST'])
+def add_session_notes(booking_id: str):
+    """Add notes to a session"""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    notes = data.get('notes', '')
+    treatment_plan = data.get('treatment_plan', '')
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Update booking with notes
+        conn.execute(
+            "UPDATE automated_bookings SET session_notes = ?, treatment_plan = ?, updated_ts = ? WHERE booking_id = ?",
+            (notes, treatment_plan, time.time(), booking_id)
+        )
+        conn.commit()
+        
+        return jsonify({"ok": True, "message": "Session notes added successfully"})
+    finally:
+        conn.close()
+
+@app.route('/professional/users', methods=['GET'])
+def get_professional_users():
+    """Get all users assigned to this professional"""
+    professional_id = request.args.get('id')
+    if not professional_id:
+        return jsonify({"error": "Professional ID required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = """
+            SELECT DISTINCT
+                u.*,
+                COUNT(ab.booking_id) as total_sessions,
+                MAX(ab.risk_level) as highest_risk_level,
+                MAX(ab.created_ts) as last_session_date
+            FROM users u
+            INNER JOIN automated_bookings ab ON u.username = ab.user_account
+            WHERE ab.professional_id = ?
+            GROUP BY u.username
+            ORDER BY last_session_date DESC
+        """
+        
+        cur = conn.execute(query, (professional_id,))
+        rows = cur.fetchall()
+        
+        users = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            user = dict(zip(columns, row))
+            users.append(user)
+        
+        return jsonify({"users": users})
+    finally:
+        conn.close()
+
+@app.route('/professional/notifications', methods=['GET'])
+def get_professional_notifications():
+    """Get professional notifications"""
+    professional_id = request.args.get('id')
+    if not professional_id:
+        return jsonify({"error": "Professional ID required"}), 400
+    
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        query = """
+            SELECT pn.*, ab.user_account, ab.risk_level
+            FROM professional_notifications pn
+            LEFT JOIN automated_bookings ab ON pn.booking_id = ab.booking_id
+            WHERE pn.professional_id = ?
+            ORDER BY pn.created_ts DESC
+            LIMIT 50
+        """
+        
+        cur = conn.execute(query, (professional_id,))
+        rows = cur.fetchall()
+        
+        notifications = []
+        columns = [desc[0] for desc in cur.description]
+        for row in rows:
+            notification = dict(zip(columns, row))
+            notifications.append(notification)
+        
+        return jsonify({"notifications": notifications})
+    finally:
+        conn.close()
+
+@app.route('/professional/notifications/<int:notification_id>/read', methods=['PUT'])
+def mark_notification_read(notification_id: int):
+    """Mark notification as read"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            "UPDATE professional_notifications SET is_read = 1 WHERE id = ?",
+            (notification_id,)
+        )
+        conn.commit()
+        
+        return jsonify({"ok": True, "message": "Notification marked as read"})
+    finally:
+        conn.close()
 
 def main():
     parser = argparse.ArgumentParser(description="AIMHSA Unified Launcher - Single Port")
