@@ -22,6 +22,14 @@ class HDevSMSService:
         self.api_key = api_key
         self.base_url = "https://sms-api.hdev.rw/v1/api"
         self.logger = logging.getLogger(__name__)
+        
+        # Set up logging if not already configured
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
     
     def send_sms(self, sender_id: str, phone_number: str, message: str, link: str = '') -> Dict:
         """
