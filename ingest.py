@@ -1,0 +1,114 @@
+import os, uuid, json
+from pathlib import Path
+# Replace ollama import with OpenAI client
+from openai import OpenAI
+from pypdf import PdfReader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DATA_DIR = Path("data")
+EMBED_FILE = Path("storage/embeddings.json")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
+
+# Initialize OpenAI client for Ollama
+openai_client = OpenAI(
+    base_url=OLLAMA_BASE_URL,
+    api_key=OLLAMA_API_KEY
+)
+
+# --- Load or initialize embeddings ---
+if EMBED_FILE.exists():
+    with open(EMBED_FILE, "r", encoding="utf-8") as f:
+        chunks_data = json.load(f)
+else:
+    chunks_data = []
+
+# --- Helper functions ---
+def load_text_from_file(path: Path) -> str:
+    if path.suffix.lower() in [".txt", ".md"]:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    if path.suffix.lower() == ".pdf":
+        pdf = PdfReader(str(path))
+        return "\n".join((page.extract_text() or "") for page in pdf.pages)
+    return ""
+
+def chunk_text(text: str):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=900, chunk_overlap=150,
+        separators=["\n\n", "\n", " ", ""]
+    )
+    return splitter.split_text(text)
+
+# --- Track existing sources ---
+existing_files = {c["source"] for c in chunks_data}
+
+new_chunks = []
+for fp in DATA_DIR.glob("**/*"):
+    if fp.suffix.lower() not in [".pdf", ".txt", ".md"]:
+        continue
+    if fp.name in existing_files:
+        continue  # skip already processed files
+
+    raw = load_text_from_file(fp)
+    if not raw.strip():
+        continue
+
+    for idx, piece in enumerate(chunk_text(raw)):
+        new_chunks.append({
+            "id": str(uuid.uuid4()),
+            "text": piece,
+            "source": fp.name,
+            "chunk": idx,
+            "embedding": None  # to fill below
+        })
+
+# --- Generate embeddings with OpenAI client ---
+if new_chunks:
+    texts = [c["text"] for c in new_chunks]
+    
+    # Generate embeddings using OpenAI client
+    embeddings = []
+    batch_size = 32  # Process in batches for better performance
+    
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        try:
+            # OpenAI client supports batch processing
+            response = openai_client.embeddings.create(
+                model=EMBED_MODEL,
+                input=batch
+            )
+            batch_embeddings = [item.embedding for item in response.data]
+            embeddings.extend(batch_embeddings)
+            print(f"Processed batch {i//batch_size + 1}/{(len(texts) + batch_size - 1)//batch_size}")
+        except Exception as e:
+            print(f"Error embedding batch: {e}")
+            # Fallback: process individually
+            for text in batch:
+                try:
+                    response = openai_client.embeddings.create(
+                        model=EMBED_MODEL,
+                        input=text
+                    )
+                    embeddings.append(response.data[0].embedding)
+                except Exception as e2:
+                    print(f"Error embedding individual text: {e2}")
+                    embeddings.append([0.0] * 384)  # fallback with correct dimension
+    
+    for c, e in zip(new_chunks, embeddings):
+        c["embedding"] = e
+
+    chunks_data.extend(new_chunks)
+
+    # Save updated embeddings
+    EMBED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(EMBED_FILE, "w", encoding="utf-8") as f:
+        json.dump(chunks_data, f, ensure_ascii=False, indent=2)
+
+    print(f"Added {len(new_chunks)} new chunks to {EMBED_FILE}")
+else:
+    print("No new documents found.")

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AIMHSA Chat</title>
+    <link rel="stylesheet" href="style.css?hnb" />
+    
+    <!-- Configuration Management -->
+    <script src="config.js"></script>
+    <script src="config-ui.js"></script>
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="user-info">
+                    <div class="avatar">👤</div>
+                    <div class="user-details">
+                        <div class="username" id="username">Guest</div>
+                        <div class="status">Online</div>
+                    </div>
+                </div>
+                <button id="newChatBtn" class="new-chat-btn">
+                    <span>+</span> New Chat
+                </button>
+            </div>
+            
+            <div class="history-section">
+                <h3>Recent Conversations</h3>
+                <div class="history-list" id="historyList">
+                    <!-- Chat history items will be dynamically added here -->
+                </div>
+                <h3 style="margin-top:16px">Archived</h3>
+                <div class="history-list" id="archivedList">
+                    <!-- Archived items -->
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <button id="logoutBtn" class="logout-btn">Sign Out</button>
+            </div>
+        </aside>
+
+        <main class="chat-area">
+            <header class="chat-header">
+                <div class="chat-title">
+                    <h2>AIMHSA</h2>
+                    <span class="chat-subtitle">Mental Health Companion</span>
+                </div>
+                <div class="chat-actions">
+                    <button id="clearChatBtn" class="action-btn clear">Clear Messages</button>
+                    <button id="clearHistoryBtn" class="action-btn danger">Clear History</button>
+                </div>
+            </header>
+
+            <div class="messages-container">
+                <div id="messages" class="messages"></div>
+            </div>
+
+            <form id="form" class="message-composer">
+                <div class="composer-input">
+                    <textarea id="query" autocomplete="off" placeholder="Type your message..." rows="1"></textarea>
+                    <label class="file-upload-btn" title="Upload PDF">
+                        <input id="file" type="file" accept="application/pdf" />
+                        📎
+                    </label>
+                    <button type="submit" id="send" class="send-btn">
+                        <span>→</span>
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <!-- Configuration Scripts (load first) -->
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    
+    <!-- Main Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>
