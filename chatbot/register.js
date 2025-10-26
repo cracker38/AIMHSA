@@ -1,5 +1,24 @@
 (() => {
-    const API_BASE_URL = `http://${window.location.hostname}:7860`;
+    // Auto-detect API base URL based on environment
+    let API_BASE_URL;
+    try {
+        const loc = window.location;
+        if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
+            // Hugging Face Spaces - use HTTPS
+            API_BASE_URL = `${loc.protocol}//${loc.hostname}`;
+        } else if (loc.port === '7860' || loc.port === '') {
+            // Local development or production without port
+            API_BASE_URL = loc.origin;
+        } else {
+            // Local development with specific port
+            API_BASE_URL = `${loc.protocol}//${loc.hostname}:7860`;
+        }
+    } catch (_) {
+        // Fallback for any errors
+        API_BASE_URL = 'https://fezaflora-aimhsa.hf.space';
+    }
+    
+    console.log('🌐 API Base URL:', API_BASE_URL);
     
     // Elements
     const registerForm = document.getElementById('registerForm');
