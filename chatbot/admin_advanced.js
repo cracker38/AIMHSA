@@ -16,16 +16,23 @@
         let apiRoot;
         try {
             const loc = window.location;
-            if (loc.port === '8000') {
+            if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
+                // Hugging Face Spaces - use HTTPS
+                apiRoot = `${loc.protocol}//${loc.hostname}`;
+            } else if (loc.port === '8000') {
+                // Local development with frontend on 8000
                 apiRoot = `${loc.protocol}//${loc.hostname}:7860`;
             } else if (loc.port === '7860' || loc.port === '') {
+                // Local development or production without port
                 apiRoot = loc.origin;
             } else {
+                // Default fallback
                 apiRoot = 'https://fezaflora-aimhsa.hf.space';
             }
         } catch (_) {
             apiRoot = 'https://fezaflora-aimhsa.hf.space';
         }
+        console.log('🌐 Admin Dashboard API Root:', apiRoot);
         return apiRoot;
     };
     
