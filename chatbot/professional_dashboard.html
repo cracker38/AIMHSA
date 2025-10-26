@@ -137,24 +137,28 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a href="#patients" class="nav-link" data-section="patients">
+                                <i class="nav-icon fas fa-users"></i>
+                                <p>My Patients</p>
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a href="#notifications" class="nav-link" data-section="notifications">
                                 <i class="nav-icon fas fa-bell"></i>
                                 <p>Notifications</p>
-                                <span class="badge badge-warning right" id="notificationCount">8</span>
+                                <span class="badge badge-warning right" id="notificationCount">0</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#profile" class="nav-link" data-section="profile">
+                                <i class="nav-icon fas fa-user-md"></i>
+                                <p>My Profile</p>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a href="#reports" class="nav-link" data-section="reports">
                                 <i class="nav-icon fas fa-chart-bar"></i>
                                 <p>Reports</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#profile" class="nav-link" data-section="profile">
-                                <i class="nav-icon fas fa-user"></i>
-                                <p>Profile</p>
                             </a>
                         </li>
                         <li class="nav-item">
@@ -427,6 +431,43 @@
                         </div>
                     </div>
 
+                    <!-- Patients Section -->
+                    <div id="patients-section" class="content-section" style="display: none;">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title">My Patients</h3>
+                                        <div class="card-tools">
+                                            <button type="button" class="btn btn-primary" onclick="refreshPatients()">
+                                                <i class="fas fa-sync"></i> Refresh
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table id="patientsTable" class="table table-bordered table-striped table-hover">
+                                                <thead class="thead-dark">
+                                                    <tr>
+                                                        <th><i class="fas fa-user"></i> Patient</th>
+                                                        <th><i class="fas fa-envelope"></i> Contact</th>
+                                                        <th><i class="fas fa-map-marker-alt"></i> Location</th>
+                                                        <th><i class="fas fa-calendar-check"></i> Sessions</th>
+                                                        <th><i class="fas fa-exclamation-triangle"></i> Risk Level</th>
+                                                        <th><i class="fas fa-clock"></i> Last Session</th>
+                                                        <th><i class="fas fa-cogs"></i> Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="patientsTableBody">
+                                                    <!-- Data will be loaded here -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- Notifications Section -->
                     <div id="notifications-section" class="content-section" style="display: none;">
@@ -513,16 +554,25 @@
                                 <div class="card card-primary card-outline">
                                     <div class="card-body box-profile">
                                         <div class="text-center">
-                                            <img class="profile-user-img img-fluid img-circle" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiByeD0iNTAiIGZpbGw9IiMyOGE3NDUiLz4KPHRleHQgeD0iNTAiIHk9IjU4IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iNDAiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SlQ8L3RleHQ+Cjwvc3ZnPgo=" alt="User profile picture" id="profileUserImage">
+                                            <i class="fas fa-user-md fa-5x text-primary"></i>
                                         </div>
-                                        <h3 class="profile-username text-center" id="profileName">Dr. John Doe</h3>
-                                        <p class="text-muted text-center" id="profileRole">Psychiatrist</p>
+                                        <h3 class="profile-username text-center" id="profileName">Loading...</h3>
+                                        <p class="text-muted text-center" id="profileRole">Loading...</p>
                                         <ul class="list-group list-group-unbordered mb-3">
                                             <li class="list-group-item">
-                                                <b>Specialization</b> <a class="float-right">Psychiatry</a>
+                                                <b>Email</b> <span class="float-right" id="profileEmail">Loading...</span>
                                             </li>
                                             <li class="list-group-item">
-                                                <b>Experience</b> <a class="float-right">8 years</a>
+                                                <b>Phone</b> <span class="float-right" id="profilePhone">Loading...</span>
+                                            </li>
+                                            <li class="list-group-item">
+                                                <b>District</b> <span class="float-right" id="profileDistrict">Loading...</span>
+                                            </li>
+                                            <li class="list-group-item">
+                                                <b>Experience</b> <span class="float-right" id="profileExperience">Loading...</span>
+                                            </li>
+                                            <li class="list-group-item">
+                                                <b>Consultation Fee</b> <span class="float-right" id="profileFee">Loading...</span>
                                             </li>
                                         </ul>
                                     </div>
@@ -531,44 +581,30 @@
                             <div class="col-md-8">
                                 <div class="card">
                                     <div class="card-header">
-                                        <h3 class="card-title">Profile Information</h3>
+                                        <h3 class="card-title">Professional Details</h3>
                                     </div>
                                     <div class="card-body">
-                                        <form>
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <div class="form-group">
-                                                        <label>First Name</label>
-                                                        <input type="text" class="form-control" value="John">
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <div class="form-group">
-                                                        <label>Last Name</label>
-                                                        <input type="text" class="form-control" value="Doe">
-                                                    </div>
-                                                </div>
+                                        <div class="form-group">
+                                            <label><strong>Bio:</strong></label>
+                                            <p id="profileBio" class="form-control-plaintext">Loading...</p>
+                                        </div>
+                                        <div class="form-group">
+                                            <label><strong>Expertise Areas:</strong></label>
+                                            <div id="profileExpertise">
+                                                <span class="text-muted">Loading...</span>
                                             </div>
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <div class="form-group">
-                                                        <label>Email</label>
-                                                        <input type="email" class="form-control" value="john.doe@aimhsa.rw">
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <div class="form-group">
-                                                        <label>Phone</label>
-                                                        <input type="tel" class="form-control" value="+250 788 123 456">
-                                                    </div>
-                                                </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label><strong>Languages:</strong></label>
+                                            <div id="profileLanguages">
+                                                <span class="text-muted">Loading...</span>
                                             </div>
-                                            <div class="form-group">
-                                                <label>Bio</label>
-                                                <textarea class="form-control" rows="3">Experienced psychiatrist specializing in trauma and anxiety disorders.</textarea>
-                                            </div>
-                                            <button type="submit" class="btn btn-primary">Update Profile</button>
-                                        </form>
+                                        </div>
+                                        <div class="form-group">
+                                            <button class="btn btn-primary" onclick="editProfile()">
+                                                <i class="fas fa-edit"></i> Edit Profile
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

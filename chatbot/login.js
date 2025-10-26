@@ -1,5 +1,5 @@
 (() => {
-    const API_BASE_URL = `https://${window.location.hostname}`;
+    const API_BASE_URL = `http://${window.location.hostname}:7860`;
     
     // API helper function
     async function api(endpoint, options = {}) {
