@@ -382,9 +382,45 @@
     }
 
     /**
-     * Initialize DataTables
+     * Validate table rows for DataTable compatibility
      */
-    function initializeDataTables() {
+    function validateTableRows(tbody, tableId) {
+        const rows = tbody.find('tr');
+        const expectedColumns = $(`#${tableId} thead th`).length;
+        
+        let validRows = [];
+        rows.each(function() {
+            const cellCount = $(this).find('td').length;
+            if (cellCount === expectedColumns) {
+                validRows.push(this);
+            } else {
+                console.warn(`⚠️ Skipping row with ${cellCount} columns (expected ${expectedColumns}) in ${tableId}`);
+            }
+        });
+        
+        return validRows;
+    }
+
+    /**
+     * Safely update DataTable with validation
+     */
+    function safeUpdateDataTable(dataTable, tbody, tableId) {
+        if (!dataTable) return false;
+        
+        try {
+            const validRows = validateTableRows(tbody, tableId);
+            dataTable.clear();
+            if (validRows.length > 0) {
+                dataTable.rows.add(validRows);
+            }
+            dataTable.draw();
+            console.log(`✅ ${tableId} DataTable updated successfully with ${validRows.length} valid rows`);
+            return true;
+        } catch (error) {
+            console.error(`❌ Error updating ${tableId} DataTable:`, error);
+            return false;
+        }
+    }
         // Professionals table
         if ($('#professionalsTable').length) {
             dataTables.professionals = $('#professionalsTable').DataTable({
@@ -1497,9 +1533,7 @@
                 }
 
                 // Update DataTable if it exists
-        if (dataTables.professionals) {
-            dataTables.professionals.clear().rows.add($(tbody).find('tr')).draw();
-        }
+                safeUpdateDataTable(dataTables.professionals, tbody, 'professionalsTable');
             })
             .catch(error => {
                 console.error(' Error loading professionals:', error);
@@ -1648,13 +1682,28 @@
         if (dataTables.bookings) {
             console.log('🔄 Updating DataTable with', tbody.find('tr').length, 'rows');
             try {
+                // Validate table structure before updating DataTable
+                const rows = tbody.find('tr');
+                const expectedColumns = $('#bookingsTable thead th').length;
+                
+                // Check if all rows have the correct number of columns
+                let validRows = [];
+                rows.each(function() {
+                    const cellCount = $(this).find('td').length;
+                    if (cellCount === expectedColumns) {
+                        validRows.push(this);
+                    } else {
+                        console.warn(`⚠️ Skipping row with ${cellCount} columns (expected ${expectedColumns})`);
+                    }
+                });
+                
                 // Clear existing data and add new rows
                 dataTables.bookings.clear();
-                if (tbody.find('tr').length > 0) {
-                    dataTables.bookings.rows.add(tbody.find('tr').toArray());
+                if (validRows.length > 0) {
+                    dataTables.bookings.rows.add(validRows);
                 }
                 dataTables.bookings.draw();
-                console.log('✅ DataTable updated successfully');
+                console.log('✅ DataTable updated successfully with', validRows.length, 'valid rows');
             } catch (error) {
                 console.error(' Error updating DataTable:', error);
                 console.log('🔄 Trying to destroy and recreate DataTable...');
@@ -1683,7 +1732,8 @@
                     });
                     console.log(' DataTable recreated successfully');
                 } catch (recreateError) {
-                    console.error(' Error recreating DataTable:', recreateError);
+                    console.error('❌ Error recreating DataTable:', recreateError);
+                    dataTables.bookings = null;
                 }
             }
         } else {
