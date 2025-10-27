@@ -9,18 +9,26 @@ import sys
 import time
 import webbrowser
 import argparse
-from flask import Flask, request, jsonify, send_from_directory, render_template_string, send_file
-from flask_cors import CORS
+import re
+import uuid
+import sqlite3
 import json
 import numpy as np
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, send_file
+from flask_cors import CORS
 from openai import OpenAI
 from dotenv import load_dotenv
-import sqlite3
 from werkzeug.security import generate_password_hash, check_password_hash
-import uuid
 import tempfile
 import pytesseract
 from werkzeug.utils import secure_filename
+
+# Import SMS service
+try:
+    from sms_service import get_sms_service
+except ImportError:
+    def get_sms_service():
+        return None
 
 # Database helper functions
 def load_history(conv_id):
@@ -89,6 +97,10 @@ DB_FILE = "storage/conversations.db"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
 
+# SMS Configuration
+HDEV_SMS_API_ID = os.getenv('HDEV_SMS_API_ID', '')
+HDEV_SMS_API_KEY = os.getenv('HDEV_SMS_API_KEY', '')
+
 # Get port from .env, fallback to 8000
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
@@ -102,6 +114,17 @@ openai_client = OpenAI(
     base_url=OLLAMA_BASE_URL,
     api_key=OLLAMA_API_KEY
 )
+
+# Initialize SMS service if credentials are provided
+if HDEV_SMS_API_ID and HDEV_SMS_API_KEY:
+    try:
+        from sms_service import initialize_sms_service
+        initialize_sms_service(HDEV_SMS_API_ID, HDEV_SMS_API_KEY)
+        print(f"✅ SMS service initialized successfully")
+    except Exception as e:
+        print(f"⚠️ SMS service initialization failed: {str(e)}")
+else:
+    print("⚠️ SMS credentials not found - SMS notifications disabled")
 
 # System prompt for AIMHSA
 SYSTEM_PROMPT = """You are AIMHSA, a professional mental health support assistant for Rwanda.
@@ -305,6 +328,346 @@ def static_files(filename):
     return send_from_directory('chatbot', filename)
 
 # ============================================================================
+# RISK ASSESSMENT AND AUTOMATED BOOKING FUNCTIONS
+# ============================================================================
+
+def assess_conversation_risk(query: str, conversation_history: list) -> dict:
+    """Assess risk level based on user query and conversation history"""
+    risk_score = 0.0
+    detected_indicators = []
+    
+    # Critical risk indicators
+    critical_patterns = [
+        r'\b(suicide|kill myself|end my life|not worth living)\b',
+        r'\b(harm myself|hurt myself|self harm)\b',
+        r'\b(plan to die|want to die|ready to die)\b',
+        r'\b(overdose|poison|jump|hang)\b'
+    ]
+    
+    # High risk indicators
+    high_patterns = [
+        r'\b(depressed|hopeless|worthless|useless)\b',
+        r'\b(anxiety|panic|overwhelmed|can\'t cope)\b',
+        r'\b(isolated|alone|nobody cares|no one understands)\b',
+        r'\b(stress|pressure|breaking down|falling apart)\b'
+    ]
+    
+    # Medium risk indicators
+    medium_patterns = [
+        r'\b(sad|upset|worried|concerned)\b',
+        r'\b(sleep|eating|energy|motivation)\b',
+        r'\b(relationship|family|work|school)\b'
+    ]
+    
+    query_lower = query.lower()
+    
+    # Check for critical patterns
+    for pattern in critical_patterns:
+        if re.search(pattern, query_lower):
+            risk_score += 0.8
+            detected_indicators.append('critical_risk')
+            break
+    
+    # Check for high patterns
+    for pattern in high_patterns:
+        if re.search(pattern, query_lower):
+            risk_score += 0.4
+            detected_indicators.append('high_risk')
+    
+    # Check for medium patterns
+    for pattern in medium_patterns:
+        if re.search(pattern, query_lower):
+            risk_score += 0.2
+            detected_indicators.append('medium_risk')
+    
+    # Analyze conversation history for patterns
+    if len(conversation_history) > 3:
+        recent_messages = conversation_history[-3:]
+        negative_sentiment_count = 0
+        
+        for msg in recent_messages:
+            content = msg.get('content', '').lower()
+            if any(word in content for word in ['bad', 'terrible', 'awful', 'hate', 'can\'t', 'won\'t']):
+                negative_sentiment_count += 1
+        
+        if negative_sentiment_count >= 2:
+            risk_score += 0.3
+            detected_indicators.append('persistent_negative')
+    
+    # Normalize score to 0-1 range
+    risk_score = min(1.0, risk_score)
+    
+    # Determine risk level
+    if risk_score >= 0.8:
+        risk_level = 'critical'
+    elif risk_score >= 0.6:
+        risk_level = 'high'
+    elif risk_score >= 0.4:
+        risk_level = 'medium'
+    else:
+        risk_level = 'low'
+    
+    return {
+        'risk_score': risk_score,
+        'risk_level': risk_level,
+        'detected_indicators': list(set(detected_indicators)),
+        'assessment_timestamp': time.time()
+    }
+
+def find_available_professional(risk_level: str, user_location: str = None) -> dict:
+    """Find an available professional based on risk level and location"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Determine required specialization based on risk level
+        if risk_level in ['critical', 'high']:
+            # For critical/high risk, prefer psychiatrist or psychologist, but also accept counselor
+            specialization_filter = "specialization IN ('psychiatrist', 'psychologist', 'counselor')"
+        else:
+            # For medium/low risk, any mental health professional
+            specialization_filter = "specialization IN ('psychiatrist', 'psychologist', 'counselor', 'social_worker')"
+        
+        # Enhanced query with location matching and better prioritization
+        query = f"""
+            SELECT id, username, first_name, last_name, email, phone, 
+                   specialization, district, consultation_fee, experience_years,
+                   expertise_areas, languages, qualifications, bio
+            FROM professionals 
+            WHERE is_active = 1 AND {specialization_filter}
+            ORDER BY 
+                CASE 
+                    WHEN specialization IN ('psychiatrist', 'psychologist') THEN 1
+                    WHEN specialization = 'counselor' THEN 2
+                    ELSE 3
+                END,
+                CASE 
+                    WHEN district = ? THEN 1
+                    ELSE 2
+                END,
+                experience_years DESC, RANDOM()
+            LIMIT 1
+        """
+        
+        # Use user location if provided, otherwise use empty string
+        location_param = user_location if user_location else ""
+        
+        cur = conn.execute(query, (location_param,))
+        professional = cur.fetchone()
+        
+        if professional:
+            selected_prof = {
+                'id': professional[0],
+                'username': professional[1],
+                'first_name': professional[2],
+                'last_name': professional[3],
+                'email': professional[4],
+                'phone': professional[5],
+                'specialization': professional[6],
+                'district': professional[7],
+                'consultation_fee': professional[8],
+                'experience_years': professional[9],
+                'expertise_areas': professional[10],
+                'languages': professional[11],
+                'qualifications': professional[12],
+                'bio': professional[13]
+            }
+            
+            # Log selection details
+            print(f"✅ Selected Professional: {selected_prof['first_name']} {selected_prof['last_name']}")
+            print(f"   Specialization: {selected_prof['specialization']}")
+            print(f"   District: {selected_prof['district']}")
+            print(f"   Experience: {selected_prof['experience_years']} years")
+            print(f"   Risk Level: {risk_level}")
+            print(f"   User Location: {user_location or 'Not specified'}")
+            
+            return selected_prof
+        return None
+    finally:
+        conn.close()
+
+def get_user_data(username: str) -> dict:
+    """Get user data for SMS notifications"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("""
+            SELECT username, email, fullname, telephone, province, district
+            FROM users WHERE username = ?
+        """, (username,))
+        user = cur.fetchone()
+        
+        if user:
+            return {
+                'username': user[0],
+                'email': user[1] or 'Not provided',
+                'fullname': user[2] or username,
+                'telephone': user[3] or 'Not provided',
+                'province': user[4] or 'Unknown',
+                'district': user[5] or 'Unknown'
+            }
+        return None
+    finally:
+        conn.close()
+
+def generate_conversation_summary(conv_id: str) -> str:
+    """Generate a summary of the conversation for the professional"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("""
+            SELECT role, content FROM messages 
+            WHERE conv_id = ? 
+            ORDER BY ts ASC 
+            LIMIT 10
+        """, (conv_id,))
+        messages = cur.fetchall()
+        
+        summary_parts = []
+        for role, content in messages:
+            if role == 'user':
+                summary_parts.append(f"User: {content[:100]}...")
+            elif role == 'assistant':
+                summary_parts.append(f"Assistant: {content[:100]}...")
+        
+        return " | ".join(summary_parts[:5])  # Limit to 5 messages
+    finally:
+        conn.close()
+
+def create_automated_booking(conv_id: str, risk_assessment: dict, user_account: str = None) -> dict:
+    """Create an automated booking for high-risk cases"""
+    try:
+        # Get user data first to extract location
+        user_data = None
+        user_location = None
+        if user_account:
+            user_data = get_user_data(user_account)
+            # Extract location from user data
+            if user_data:
+                user_location = user_data.get('district', '')
+        
+        # Find available professional with location matching
+        professional = find_available_professional(risk_assessment['risk_level'], user_location)
+        
+        if not professional:
+            print(f"❌ No available professional found for risk level: {risk_assessment['risk_level']}")
+            return None
+        
+        # Generate booking ID
+        booking_id = f"auto_{conv_id}_{int(time.time())}"
+        
+        # Create conversation summary
+        conversation_summary = generate_conversation_summary(conv_id)
+        
+        # Determine session timing
+        if risk_assessment['risk_level'] == 'critical':
+            scheduled_datetime = time.time() + 3600  # 1 hour from now
+            session_type = 'emergency'
+        else:
+            scheduled_datetime = time.time() + 86400  # 24 hours from now
+            session_type = 'urgent'
+        
+        # Create booking in database
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute("""
+                INSERT INTO automated_bookings
+                (booking_id, conv_id, user_account, professional_id, risk_level, risk_score,
+                 detected_indicators, conversation_summary, booking_status, scheduled_datetime,
+                 session_type, notes, created_ts, updated_ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                booking_id, conv_id, user_account, professional['id'],
+                risk_assessment['risk_level'], risk_assessment['risk_score'],
+                json.dumps(risk_assessment['detected_indicators']), conversation_summary,
+                'pending', scheduled_datetime, session_type,
+                f"Automated booking for {risk_assessment['risk_level']} risk case",
+                time.time(), time.time()
+            ))
+            conn.commit()
+            
+            # Create professional notification
+            conn.execute("""
+                INSERT INTO professional_notifications
+                (professional_id, booking_id, title, message, priority, is_read, 
+                 notification_type, risk_level, created_ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                professional['id'], booking_id,
+                f"New {risk_assessment['risk_level'].upper()} Risk Booking",
+                f"Automated booking created for high-risk case. Risk level: {risk_assessment['risk_level']}",
+                'high' if risk_assessment['risk_level'] in ['high', 'critical'] else 'medium',
+                0, 'booking_assigned', risk_assessment['risk_level'], time.time()
+            ))
+            conn.commit()
+            
+        finally:
+            conn.close()
+        
+        # Send SMS notifications
+        sms_results = {'user_sms': None, 'professional_sms': None}
+        
+        try:
+            from sms_service import get_sms_service
+            sms_service = get_sms_service()
+            
+            if sms_service:
+                # Send SMS to user if they have a phone number
+                if user_data and user_data.get('telephone'):
+                    try:
+                        user_sms_result = sms_service.send_booking_notification(
+                            user_data, professional, {
+                                'booking_id': booking_id,
+                                'risk_level': risk_assessment['risk_level'],
+                                'scheduled_datetime': scheduled_datetime,
+                                'session_type': session_type
+                            }
+                        )
+                        sms_results['user_sms'] = user_sms_result
+                        print(f"✅ User SMS sent: {user_sms_result.get('success', False)}")
+                    except Exception as e:
+                        print(f"❌ User SMS failed: {str(e)}")
+                
+                # Send SMS to professional
+                if professional.get('phone'):
+                    try:
+                        prof_sms_result = sms_service.send_professional_notification(
+                            professional, user_data or {}, {
+                                'booking_id': booking_id,
+                                'risk_level': risk_assessment['risk_level'],
+                                'scheduled_datetime': scheduled_datetime,
+                                'session_type': session_type,
+                                'conversation_summary': conversation_summary
+                            }
+                        )
+                        sms_results['professional_sms'] = prof_sms_result
+                        print(f"✅ Professional SMS sent: {prof_sms_result.get('success', False)}")
+                    except Exception as e:
+                        print(f"❌ Professional SMS failed: {str(e)}")
+            else:
+                print("⚠️ SMS service not available")
+                
+        except Exception as e:
+            print(f"❌ SMS notification error: {str(e)}")
+        
+        print(f"✅ Automated booking created: {booking_id}")
+        print(f"   Professional: {professional['first_name']} {professional['last_name']}")
+        print(f"   Risk Level: {risk_assessment['risk_level']}")
+        print(f"   SMS Results: User={sms_results['user_sms']}, Professional={sms_results['professional_sms']}")
+        
+        return {
+            'booking_id': booking_id,
+            'professional': professional,
+            'professional_name': f"{professional['first_name']} {professional['last_name']}",
+            'specialization': professional.get('specialization', 'counselor'),
+            'professional_id': professional['id'],
+            'risk_level': risk_assessment['risk_level'],
+            'session_type': session_type,
+            'scheduled_datetime': scheduled_datetime,
+            'sms_results': sms_results
+        }
+        
+    except Exception as e:
+        print(f"❌ Error creating automated booking: {str(e)}")
+        return None
+
+# ============================================================================
 # API ROUTES
 # ============================================================================
 
@@ -352,6 +715,15 @@ def ask():
 
     # Load conversation history
     history = load_history(conv_id)
+    
+    # Get message count for this conversation
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        message_count = conn.execute("""
+            SELECT COUNT(*) FROM messages WHERE conv_id = ?
+        """, (conv_id,)).fetchone()[0]
+    finally:
+        conn.close()
     
     # Build messages for AI
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -402,10 +774,85 @@ CONTEXT:
         save_message(conv_id, "user", query)
         save_message(conv_id, "assistant", answer)
         
+        # RISK ASSESSMENT AND AUTOMATED BOOKING WORKFLOW
+        risk_assessment = assess_conversation_risk(query, history)
+        
+        # Store risk assessment
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute("""
+                INSERT INTO risk_assessments 
+                (conv_id, user_query, risk_score, risk_level, detected_indicators, assessment_timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                conv_id, 
+                query, 
+                risk_assessment['risk_score'],
+                risk_assessment['risk_level'],
+                json.dumps(risk_assessment['detected_indicators']),
+                risk_assessment['assessment_timestamp']
+            ))
+            conn.commit()
+        finally:
+            conn.close()
+        
+        # Check for automated booking triggers
+        booking_result = None
+        ask_booking = None
+        booking_created = False
+        
+        # Check if booking prompt was already shown for this conversation
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            booking_prompt_shown = conn.execute("""
+                SELECT booking_prompt_shown FROM conversations WHERE conv_id = ?
+            """, (conv_id,)).fetchone()
+            booking_prompt_shown = booking_prompt_shown[0] if booking_prompt_shown else False
+        finally:
+            conn.close()
+        
+        # Trigger 1: After 5 messages - ask user if they want to book (only once per conversation)
+        if message_count >= 5 and not booking_prompt_shown:
+            ask_booking = True
+            # Mark that booking prompt has been shown
+            conn = sqlite3.connect(DB_FILE)
+            try:
+                conn.execute("""
+                    UPDATE conversations SET booking_prompt_shown = 1 WHERE conv_id = ?
+                """, (conv_id,))
+                conn.commit()
+            finally:
+                conn.close()
+        
+        # Trigger 2: High/Critical risk detection - automatic booking
+        if risk_assessment['risk_level'] in ['high', 'critical']:
+            user_account = data.get("account", "").strip()
+            booking_result = create_automated_booking(conv_id, risk_assessment, user_account)
+            
+            if booking_result:
+                # Add booking notification to response
+                answer += f"\n\n🚨 **URGENT**: Based on our conversation, I've automatically scheduled you with a mental health professional. You will receive SMS confirmation shortly."
+                # Set flag to trigger frontend booking display
+                booking_created = True
+                booking_id = booking_result.get('booking_id')
+                professional_name = booking_result.get('professional_name')
+                specialization = booking_result.get('specialization')
+                session_type = booking_result.get('session_type')
+                scheduled_datetime = booking_result.get('scheduled_datetime')
+        
         # Prepare response
         resp = {"answer": answer, "id": conv_id}
         if new_conv:
             resp["new"] = True
+        if ask_booking:
+            resp["ask_booking"] = True
+        if booking_result:
+            resp["booking_created"] = True
+            resp["booking_id"] = booking_result.get("booking_id")
+            resp["professional_name"] = booking_result.get("professional_name")
+            resp["specialization"] = booking_result.get("specialization")
+            resp["session_type"] = booking_result.get("session_type")
+            resp["scheduled_datetime"] = booking_result.get("scheduled_datetime")
         
         return jsonify(resp)
         
@@ -573,6 +1020,56 @@ def api_history():
         return jsonify({"id": conv_id, "history": hist})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/request-booking', methods=['POST'])
+def request_booking():
+    """Handle manual booking requests from users"""
+    data = request.get_json(force=True)
+    conv_id = data.get("conv_id")
+    user_account = data.get("account", "").strip()
+    
+    if not conv_id:
+        return jsonify({"error": "Missing conversation ID"}), 400
+    
+    try:
+        # Load conversation history for risk assessment
+        history = load_history(conv_id)
+        
+        # Get the last user message for risk assessment
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            cur = conn.execute("""
+                SELECT content FROM messages 
+                WHERE conv_id = ? AND role = 'user' 
+                ORDER BY ts DESC LIMIT 1
+            """, (conv_id,))
+            last_message = cur.fetchone()
+            last_query = last_message[0] if last_message else ""
+        finally:
+            conn.close()
+        
+        # Assess risk based on conversation
+        risk_assessment = assess_conversation_risk(last_query, history)
+        
+        # Create booking (even for low risk if user requests)
+        booking_result = create_automated_booking(conv_id, risk_assessment, user_account)
+        
+        if booking_result:
+            return jsonify({
+                "success": True,
+                "booking_id": booking_result["booking_id"],
+                "professional": booking_result["professional"],
+                "risk_level": booking_result["risk_level"],
+                "message": "Booking request submitted successfully. You will receive SMS confirmation shortly."
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Unable to create booking at this time. Please try again later."
+            }), 500
+            
+    except Exception as e:
+        return jsonify({"error": f"Booking request failed: {str(e)}"}), 500
 
 @app.route('/api/reset', methods=['POST'])
 def api_reset():
@@ -1067,6 +1564,241 @@ def clear_chat():
     finally:
         conn.close()
 
+# --- delete a conversation (requires account owner) ---
+@app.route('/conversations/delete', methods=['POST'])
+@app.route('/api/conversations/delete', methods=['POST'])
+def delete_conversation():
+    """
+    POST /conversations/delete
+    JSON: { "account": "...", "id": "<conv_id>" }
+    Only allows deletion when the conversation owner matches acct:<account>.
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+
+    account = (data.get("account") or "").strip()
+    conv_id = (data.get("id") or "").strip()
+    password = (data.get("password") or "").strip()
+    if not account or not conv_id:
+        return jsonify({"error": "account and id required"}), 400
+
+    owner_key = f"acct:{account}"
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT owner_key, IFNULL(archived,0), archive_pw_hash FROM conversations WHERE conv_id = ?", (conv_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "conversation not found"}), 404
+        if (row[0] or "") != owner_key:
+            return jsonify({"error": "forbidden"}), 403
+        # If archived and locked, require correct password to delete
+        if int(row[1]) == 1 and row[2]:
+            if not password or not check_password_hash(row[2], password):
+                return jsonify({"error": "invalid password"}), 403
+
+        # delete related rows
+        conn.execute("DELETE FROM messages WHERE conv_id = ?", (conv_id,))
+        conn.execute("DELETE FROM attachments WHERE conv_id = ?", (conv_id,))
+        conn.execute("DELETE FROM sessions WHERE conv_id = ?", (conv_id,))
+        conn.execute("DELETE FROM conversations WHERE conv_id = ?", (conv_id,))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+# --- rename a conversation (requires account owner) ---
+@app.route('/conversations/rename', methods=['POST'])
+@app.route('/api/conversations/rename', methods=['POST'])
+def rename_conversation():
+    """
+    POST /conversations/rename
+    JSON: { "account": "...", "id": "<conv_id>", "preview": "<new title>" }
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    account = (data.get("account") or "").strip()
+    conv_id = (data.get("id") or "").strip()
+    preview = (data.get("preview") or "").strip()
+    if not account or not conv_id or not preview:
+        return jsonify({"error": "account, id and preview required"}), 400
+    owner_key = f"acct:{account}"
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute("SELECT owner_key, IFNULL(archived,0) FROM conversations WHERE conv_id = ?", (conv_id,))
+        row = cur.fetchone()
+        if not row:
+            return jsonify({"error": "conversation not found"}), 404
+        if (row[0] or "") != owner_key:
+            return jsonify({"error": "forbidden"}), 403
+        if int(row[1]) == 1:
+            return jsonify({"error": "cannot rename archived conversation"}), 403
+        conn.execute("UPDATE conversations SET preview = ?, ts = ? WHERE conv_id = ?", (preview[:120], time.time(), conv_id))
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+# --- handle booking response from user ---
+@app.route('/booking_response', methods=['POST'])
+def handle_booking_response():
+    """
+    POST /booking_response
+    JSON: { "conversation_id": "...", "response": "yes/no", "account": "..." }
+    Handles user's response to booking question
+    """
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    conversation_id = data.get("conversation_id")
+    response = data.get("response")  # "yes" or "no"
+    account = data.get("account")
+    
+    if not conversation_id or not response:
+        return jsonify({"error": "conversation_id and response required"}), 400
+    
+    if response not in ["yes", "no"]:
+        return jsonify({"error": "response must be 'yes' or 'no'"}), 400
+    
+    # If user wants booking, create one
+    if response == "yes":
+        try:
+            # Get conversation history for risk assessment
+            conn = sqlite3.connect(DB_FILE)
+            try:
+                cur = conn.execute("SELECT role, content FROM messages WHERE conv_id = ? ORDER BY ts DESC LIMIT 10", (conversation_id,))
+                messages = cur.fetchall()
+                conversation_history = [{"role": row[0], "content": row[1]} for row in messages]
+                
+                # Simple risk assessment based on recent messages
+                risk_level = "medium"  # Default for user-requested booking
+                for msg in conversation_history:
+                    content = msg["content"].lower()
+                    if any(word in content for word in ["suicide", "kill", "end", "harm"]):
+                        risk_level = "critical"
+                        break
+                    elif any(word in content for word in ["depressed", "hopeless", "crisis", "emergency"]):
+                        risk_level = "high"
+                        break
+                
+                # Get user location for better matching
+                user_location = None
+                if account:
+                    user_data = get_user_data(account)
+                    if user_data:
+                        user_location = user_data.get('district', '')
+                
+                # Find available professional with location matching
+                professional = find_available_professional(risk_level, user_location)
+                
+                if professional:
+                    # Create booking
+                    booking_id = str(uuid.uuid4())
+                    current_time = time.time()
+                    
+                    # Schedule for within 24 hours
+                    scheduled_time = current_time + (24 * 60 * 60)  # 24 hours from now
+                    
+                    conn.execute("""
+                        INSERT INTO automated_bookings 
+                        (booking_id, conv_id, user_account, professional_id, risk_level, risk_score, 
+                         booking_status, scheduled_datetime, session_type, created_ts, updated_ts)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (booking_id, conversation_id, account, professional["id"], risk_level, 0.5,
+                          "pending", scheduled_time, "consultation", current_time, current_time))
+                    
+                    # Create notification for professional
+                    conn.execute("""
+                        INSERT INTO professional_notifications 
+                        (professional_id, booking_id, notification_type, title, message, priority, created_ts)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (professional["id"], booking_id, "new_booking", 
+                          f"New {risk_level.title()} Risk Booking", 
+                          f"User {account} has requested a mental health consultation.", 
+                          "high" if risk_level in ["critical", "high"] else "normal", current_time))
+                    
+                    conn.commit()
+                    
+                    # Send SMS notifications if configured
+                    sms_service = get_sms_service()
+                    if sms_service:
+                        try:
+                            # Get user data for SMS
+                            user_data = None
+                            if account:
+                                user_data = get_user_data(account)
+                            
+                            # Send SMS to user
+                            if user_data and user_data.get("telephone"):
+                                sms_service.send_booking_notification(
+                                    user_data, professional, {
+                                        "booking_id": booking_id,
+                                        "scheduled_time": scheduled_time,
+                                        "risk_level": risk_level,
+                                        "session_type": "consultation"
+                                    }
+                                )
+                            
+                            # Send SMS to professional
+                            if professional.get("phone"):
+                                sms_service.send_professional_notification(
+                                    professional, user_data or {"fullname": account}, {
+                                        "booking_id": booking_id,
+                                        "scheduled_time": scheduled_time,
+                                        "risk_level": risk_level,
+                                        "session_type": "consultation"
+                                    }
+                                )
+                        except Exception as sms_error:
+                            print(f"SMS notification failed: {sms_error}")
+                    
+                    # Format professional name
+                    professional_name = f"{professional.get('first_name', '')} {professional.get('last_name', '')}"
+                    specialization = professional.get('specialization', 'counselor')
+                    
+                    return jsonify({
+                        "ok": True,
+                        "message": "Booking created successfully! You will receive SMS confirmation shortly.",
+                        "booking": {
+                            "booking_id": booking_id,
+                            "professional_name": professional_name,
+                            "specialization": specialization,
+                            "session_type": "consultation",
+                            "scheduled_datetime": scheduled_time,
+                            "professional": professional,
+                            "scheduled_time": scheduled_time,
+                            "risk_level": risk_level
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "ok": True,
+                        "message": "I'm sorry, no professionals are currently available. Please try again later or contact the Mental Health Hotline at 105 for immediate support."
+                    })
+                    
+            finally:
+                conn.close()
+                
+        except Exception as e:
+            return jsonify({"error": f"Failed to create booking: {str(e)}"}), 500
+    
+    else:  # response == "no"
+        return jsonify({
+            "ok": True,
+            "message": "No problem! I'm here whenever you need support. Feel free to continue our conversation or reach out anytime."
+        })
+
 # Admin endpoints for professional management
 @app.route('/admin/professionals', methods=['POST'])
 def create_professional():
@@ -1312,6 +2044,74 @@ def delete_professional(prof_id: int):
     finally:
         conn.close()
 
+@app.route('/admin/professionals/<int:prof_id>/cancel-bookings', methods=['POST'])
+def cancel_professional_bookings(prof_id: int):
+    """Cancel all active bookings for a professional"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Check if professional exists
+        existing = conn.execute("SELECT first_name, last_name FROM professionals WHERE id = ?", (prof_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Professional not found"}), 404
+        
+        first_name, last_name = existing
+        
+        # Cancel all active bookings
+        result = conn.execute(
+            "UPDATE automated_bookings SET booking_status = 'cancelled' WHERE professional_id = ? AND booking_status IN ('pending', 'confirmed')",
+            (prof_id,)
+        )
+        
+        cancelled_count = result.rowcount
+        conn.commit()
+        
+        return jsonify({
+            "ok": True, 
+            "message": f"Cancelled {cancelled_count} active booking(s) for {first_name} {last_name}"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/admin/professionals/<int:prof_id>/transfer-bookings', methods=['POST'])
+def transfer_professional_bookings(prof_id: int):
+    """Transfer all active bookings from one professional to another"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        data = request.get_json()
+        to_professional_id = data.get('to_professional_id')
+        
+        if not to_professional_id:
+            return jsonify({"error": "Target professional ID is required"}), 400
+        
+        # Check if both professionals exist
+        from_prof = conn.execute("SELECT first_name, last_name FROM professionals WHERE id = ?", (prof_id,)).fetchone()
+        to_prof = conn.execute("SELECT first_name, last_name FROM professionals WHERE id = ?", (to_professional_id,)).fetchone()
+        
+        if not from_prof:
+            return jsonify({"error": "Source professional not found"}), 404
+        if not to_prof:
+            return jsonify({"error": "Target professional not found"}), 404
+        
+        # Transfer all active bookings
+        result = conn.execute(
+            "UPDATE automated_bookings SET professional_id = ? WHERE professional_id = ? AND booking_status IN ('pending', 'confirmed')",
+            (to_professional_id, prof_id)
+        )
+        
+        transferred_count = result.rowcount
+        conn.commit()
+        
+        return jsonify({
+            "ok": True, 
+            "message": f"Transferred {transferred_count} active booking(s) from {from_prof[0]} {from_prof[1]} to {to_prof[0]} {to_prof[1]}"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
 @app.route('/admin/professionals/<int:prof_id>/status', methods=['POST'])
 def toggle_professional_status(prof_id: int):
     """Toggle professional active status"""
@@ -1391,6 +2191,29 @@ def list_bookings():
             bookings.append(booking)
         
         return jsonify({"bookings": bookings})
+    finally:
+        conn.close()
+
+@app.route('/admin/bookings/<booking_id>', methods=['DELETE'])
+def delete_booking(booking_id):
+    """Delete a booking permanently"""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        # Check if booking exists
+        existing = conn.execute("SELECT booking_id FROM automated_bookings WHERE booking_id = ?", (booking_id,)).fetchone()
+        if not existing:
+            return jsonify({"error": "Booking not found"}), 404
+        
+        # Delete the booking
+        conn.execute("DELETE FROM automated_bookings WHERE booking_id = ?", (booking_id,))
+        conn.commit()
+        
+        return jsonify({
+            "ok": True, 
+            "message": f"Booking {booking_id} deleted successfully"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
 

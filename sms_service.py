@@ -184,6 +184,20 @@ AIMHSA Team"""
             user_email = user_data.get('email', 'Not provided')
             user_location = f"{user_data.get('district', 'Unknown')}, {user_data.get('province', 'Unknown')}"
             
+            # Get booking reason
+            booking_reason = booking_data.get('conversation_summary', user_data.get('last_query', 'Mental health support needed'))
+            
+            # Build contact info section dynamically
+            contact_info = []
+            if user_phone and user_phone != 'Not provided':
+                contact_info.append(f"Phone: {user_phone}")
+            if user_email and user_email != 'Not provided':
+                contact_info.append(f"Email: {user_email}")
+            if user_location and user_location != 'Unknown, Unknown':
+                contact_info.append(f"Location: {user_location}")
+            
+            contact_section = "\n".join(contact_info) if contact_info else "Contact information will be provided upon confirmation."
+            
             message = f"""AIMHSA Professional Alert
 
 New {risk_level.upper()} risk booking assigned to you.
@@ -194,11 +208,12 @@ Risk Level: {risk_level.upper()}
 Scheduled: {scheduled_time}
 
 USER CONTACT INFORMATION:
-Phone: {user_phone}
-Email: {user_email}
-Location: {user_location}
+{contact_section}
 
-Please login to your dashboard to view details and accept/decline the booking:
+REASON FOR BOOKING:
+{booking_reason[:200]}{'...' if len(booking_reason) > 200 else ''}
+
+Please login to your dashboard to view full details and accept/decline:
 https://fezaflora-aimhsa.hf.space/login
 
 AIMHSA System"""
