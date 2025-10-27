@@ -10,28 +10,53 @@ from translation_service import translation_service
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client for Ollama
+# Initialize OpenAI client for Ollama with error handling
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
 
-openai_client = OpenAI(
-    base_url=OLLAMA_BASE_URL,
-    api_key=OLLAMA_API_KEY
-)
+try:
+    openai_client = OpenAI(
+        base_url=OLLAMA_BASE_URL,
+        api_key=OLLAMA_API_KEY
+    )
+    print("✅ OpenAI client initialized (Ollama)")
+except Exception as e:
+    print(f"⚠️ Failed to initialize OpenAI client: {e}")
+    openai_client = None
 
-# Load embeddings once at startup
+# Load embeddings once at startup with error handling
 def load_embeddings():
-    with open('storage/embeddings.json', 'r') as f:
-        chunks = json.load(f)
-    chunk_texts = [c["text"] for c in chunks]
-    chunk_sources = [{"source": c["source"], "chunk": c["chunk"]} for c in chunks]
-    chunk_embeddings = np.array([c["embedding"] for c in chunks], dtype=np.float32)
-    return chunks, chunk_texts, chunk_sources, chunk_embeddings
+    try:
+        with open('storage/embeddings.json', 'r') as f:
+            chunks = json.load(f)
+        chunk_texts = [c["text"] for c in chunks]
+        chunk_sources = [{"source": c["source"], "chunk": c["chunk"]} for c in chunks]
+        chunk_embeddings = np.array([c["embedding"] for c in chunks], dtype=np.float32)
+        print(f"✅ Loaded {len(chunks)} embeddings")
+        return chunks, chunk_texts, chunk_sources, chunk_embeddings
+    except FileNotFoundError:
+        print("⚠️ Embeddings file not found - RAG features disabled")
+        return [], [], [], None
+    except Exception as e:
+        print(f"⚠️ Error loading embeddings: {e}")
+        return [], [], [], None
 
 chunks, chunk_texts, chunk_sources, chunk_embeddings = load_embeddings()
 
 def get_rag_response(query):
     """Get RAG response for a query using OpenAI client"""
+    # If OpenAI client or embeddings not available, provide helpful fallback response
+    if openai_client is None or chunk_embeddings is None:
+        fallback_responses = {
+            'greeting': "Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today?",
+            'default': "I understand you're reaching out for support. I'm here to help with your mental health concerns. Could you tell me more about what's troubling you?"
+        }
+        
+        query_lower = query.lower().strip()
+        if any(word in query_lower for word in ['hello', 'hi', 'good morning', 'good evening', 'greetings']):
+            return fallback_responses['greeting']
+        return fallback_responses['default']
+    
     try:
         # Get query embedding using OpenAI client
         response = openai_client.embeddings.create(
@@ -42,7 +67,7 @@ def get_rag_response(query):
         
         # Check dimensions
         if q_emb.shape[1] != chunk_embeddings.shape[1]:
-            return "I'm sorry, there's a technical issue with the system."
+            return "I'm sorry, there's a technical issue with the system. Please try rephrasing your question."
         
         # Find similar chunks
         doc_norm = chunk_embeddings / np.linalg.norm(chunk_embeddings, axis=1, keepdims=True)
@@ -129,8 +154,22 @@ def serve_css(filename):
     return send_from_directory('chatbot', filename)
 
 if __name__ == '__main__':
-    print("Starting Working AIMHSA API...")
-    print("RAG System: Ready")
-    print("Embeddings: Loaded")
-    print("Models: Available via OpenAI Client")
-    app.run(host='0.0.0.0', port=7860, debug=True)
+    print("="*60)
+    print("🧠 AIMHSA - AI Mental Health Support Assistant")
+    print("="*60)
+    
+    if openai_client:
+        print("✅ Ollama OpenAI Client: Available")
+    else:
+        print("⚠️ Ollama OpenAI Client: Not available")
+    
+    if chunk_embeddings is not None:
+        print(f"✅ Embeddings: Loaded ({len(chunks)} chunks)")
+    else:
+        print("⚠️ Embeddings: Not available - using fallback responses")
+    
+    print("="*60)
+    print("Starting AIMHSA API on port 7860...")
+    print("="*60)
+    
+    app.run(host='0.0.0.0', port=7860, debug=False)
