@@ -313,6 +313,102 @@
     }
 
     /**
+     * Initialize DataTables for all tables
+     */
+    function initializeDataTables() {
+        console.log('🔧 Initializing DataTables...');
+        
+        try {
+            // Check if DataTables is loaded
+            if (typeof $.fn.DataTable === 'undefined') {
+                console.warn('⚠️ DataTables library not loaded, skipping initialization');
+                return;
+            }
+            
+            // Initialize professionals table
+            if ($('#professionalsTable').length && !$.fn.DataTable.isDataTable('#professionalsTable')) {
+                console.log('📊 Initializing professionals DataTable...');
+                dataTables.professionals = $('#professionalsTable').DataTable({
+                    "responsive": true,
+                    "lengthChange": true,
+                    "autoWidth": false,
+                    "pageLength": 25,
+                    "order": [[0, "desc"]],
+                    "language": {
+                        "search": "Search professionals:",
+                        "lengthMenu": "Show _MENU_ entries",
+                        "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                        "infoEmpty": "No entries found",
+                        "infoFiltered": "(filtered from _MAX_ total entries)"
+                    },
+                    "columnDefs": [
+                        { "orderable": false, "targets": -1 } // Disable ordering on action column
+                    ]
+                });
+                console.log('✅ Professionals DataTable initialized');
+            } else if ($.fn.DataTable.isDataTable('#professionalsTable')) {
+                console.log('📊 Professionals DataTable already initialized, getting reference...');
+                dataTables.professionals = $('#professionalsTable').DataTable();
+            }
+            
+            // Initialize bookings table
+            if ($('#bookingsTable').length && !$.fn.DataTable.isDataTable('#bookingsTable')) {
+                console.log('📊 Initializing bookings DataTable...');
+                dataTables.bookings = $('#bookingsTable').DataTable({
+                    "responsive": true,
+                    "lengthChange": true,
+                    "autoWidth": false,
+                    "pageLength": 25,
+                    "order": [[0, "desc"]],
+                    "language": {
+                        "search": "Search bookings:",
+                        "lengthMenu": "Show _MENU_ entries",
+                        "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                        "infoEmpty": "No entries found",
+                        "infoFiltered": "(filtered from _MAX_ total entries)"
+                    },
+                    "columnDefs": [
+                        { "orderable": false, "targets": -1 } // Disable ordering on action column
+                    ]
+                });
+                console.log('✅ Bookings DataTable initialized');
+            } else if ($.fn.DataTable.isDataTable('#bookingsTable')) {
+                console.log('📊 Bookings DataTable already initialized, getting reference...');
+                dataTables.bookings = $('#bookingsTable').DataTable();
+            }
+            
+            // Initialize risk assessments table
+            if ($('#riskAssessmentsTable').length && !$.fn.DataTable.isDataTable('#riskAssessmentsTable')) {
+                console.log('📊 Initializing risk assessments DataTable...');
+                dataTables.riskAssessments = $('#riskAssessmentsTable').DataTable({
+                    "responsive": true,
+                    "lengthChange": true,
+                    "autoWidth": false,
+                    "pageLength": 25,
+                    "order": [[0, "desc"]],
+                    "language": {
+                        "search": "Search assessments:",
+                        "lengthMenu": "Show _MENU_ entries",
+                        "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                        "infoEmpty": "No entries found",
+                        "infoFiltered": "(filtered from _MAX_ total entries)"
+                    }
+                });
+                console.log('✅ Risk assessments DataTable initialized');
+            } else if ($.fn.DataTable.isDataTable('#riskAssessmentsTable')) {
+                console.log('📊 Risk assessments DataTable already initialized, getting reference...');
+                dataTables.riskAssessments = $('#riskAssessmentsTable').DataTable();
+            }
+            
+            console.log('✅ All DataTables initialized successfully');
+            
+        } catch (error) {
+            console.error('❌ Error initializing DataTables:', error);
+            // Don't throw error, just log it and continue
+        }
+    }
+
+    /**
      * Initialize navigation system
      */
     function initializeNavigation() {
@@ -469,8 +565,6 @@
                     }
                 }
             });
-        }
-
     }
 
     /**
@@ -1466,7 +1560,7 @@
                         
             const consultationFee = prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A';
             const district = prof.district || 'N/A';
-            
+                        
             const row = `
                 <tr class="professional-row" data-id="${prof.id}">
                     <td><strong>${prof.id}</strong></td>
@@ -1504,6 +1598,11 @@
                         <i class="fas fa-map-marker-alt text-danger mr-1"></i>${district}
                     </td>
                     <td>
+                        <span class="badge badge-warning" id="activeBookings-${prof.id}">
+                            <i class="fas fa-spinner fa-spin mr-1"></i>Loading...
+                        </span>
+                    </td>
+                    <td>
                         <span class="badge badge-${statusClass} badge-pill">
                             <i class="fas fa-${prof.is_active ? 'check-circle' : 'times-circle'} mr-1"></i>${statusText}
                         </span>
@@ -1511,16 +1610,16 @@
                     <td>
                         <div class="btn-group" role="group">
                             <button class="btn btn-sm btn-outline-primary" onclick="editProfessional(${prof.id})" title="Edit Professional">
-                                <i class="fas fa-edit"></i>
-                            </button>
+                            <i class="fas fa-edit"></i>
+                        </button>
                             <button class="btn btn-sm btn-outline-${prof.is_active ? 'warning' : 'success'}" 
-                                    onclick="toggleProfessionalStatus(${prof.id})" 
+                                            onclick="toggleProfessionalStatus(${prof.id})" 
                                     title="${prof.is_active ? 'Deactivate' : 'Activate'} Professional">
-                                <i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i>
-                            </button>
+                                        <i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i>
+                                    </button>
                             <button class="btn btn-sm btn-outline-danger" onclick="deleteProfessional(${prof.id})" title="Delete Professional">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                            <i class="fas fa-trash"></i>
+                        </button>
                         </div>
                     </td>
                 </tr>
@@ -1529,22 +1628,82 @@
         });
                     console.log(' Professionals loaded successfully');
                 } else {
-                    tbody.html('<tr><td colspan="10" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
+                    tbody.html('<tr><td colspan="11" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
                 }
 
                 // Update DataTable if it exists
                 safeUpdateDataTable(dataTables.professionals, tbody, 'professionalsTable');
+                
+                // Load active bookings count for each professional
+                loadActiveBookingsCount(data.professionals);
             })
             .catch(error => {
                 console.error(' Error loading professionals:', error);
                 tbody.html(`
                     <tr>
-                        <td colspan="10" class="text-center text-danger">
+                        <td colspan="11" class="text-center text-danger">
                             <i class="fas fa-exclamation-triangle"></i> Error loading professionals
                             <br><small>${error.message}</small>
                         </td>
                     </tr>
                 `);
+            });
+    }
+
+    /**
+     * Load active bookings count for each professional
+     */
+    function loadActiveBookingsCount(professionals) {
+        console.log('📊 Loading active bookings count for professionals...');
+        
+        // Safety check
+        if (!professionals || !Array.isArray(professionals)) {
+            console.warn('⚠️ Invalid professionals data provided to loadActiveBookingsCount');
+            return;
+        }
+        
+        // Load bookings data
+        fetch(`${API_ROOT}/admin/bookings`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.bookings) {
+                    // Count active bookings per professional
+                    const bookingsByProfessional = {};
+                    data.bookings.forEach(booking => {
+                        if (['pending', 'confirmed'].includes(booking.booking_status)) {
+                            const profId = booking.professional_id;
+                            bookingsByProfessional[profId] = (bookingsByProfessional[profId] || 0) + 1;
+                        }
+                    });
+                    
+                    // Update each professional's active bookings count
+                    professionals.forEach(prof => {
+                        const activeCount = bookingsByProfessional[prof.id] || 0;
+                        const badgeElement = document.getElementById(`activeBookings-${prof.id}`);
+                        if (badgeElement) {
+                            if (activeCount > 0) {
+                                badgeElement.className = 'badge badge-danger';
+                                badgeElement.innerHTML = `<i class="fas fa-calendar-check mr-1"></i>${activeCount}`;
+                            } else {
+                                badgeElement.className = 'badge badge-success';
+                                badgeElement.innerHTML = '<i class="fas fa-check-circle mr-1"></i>0';
+                            }
+                        }
+                    });
+                    
+                    console.log('✅ Active bookings count updated for all professionals');
+                }
+            })
+            .catch(error => {
+                console.error('❌ Error loading active bookings count:', error);
+                // Set all to error state
+                professionals.forEach(prof => {
+                    const badgeElement = document.getElementById(`activeBookings-${prof.id}`);
+                    if (badgeElement) {
+                        badgeElement.className = 'badge badge-secondary';
+                        badgeElement.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i>Error';
+                    }
+                });
             });
     }
 
@@ -1920,6 +2079,9 @@
                         <i class="fas fa-times"></i>
                     </button>
                 ` : ''}
+                <button class="action-btn btn-outline-danger" onclick="deleteBooking('${bookingId}')" title="Delete Booking">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
     }
@@ -2175,14 +2337,14 @@
         .then(data => {
             console.log(' Response data:', data);
             if (data.ok) {
-                Swal.fire({
-                    title: 'Success!',
+        Swal.fire({
+            title: 'Success!',
                     text: isEditMode ? 'Professional updated successfully!' : 'Professional added successfully!',
-                    icon: 'success',
-                    timer: 2000
-                }).then(() => {
-                    $('#professionalModal').modal('hide');
-                    loadProfessionals();
+            icon: 'success',
+            timer: 2000
+        }).then(() => {
+            $('#professionalModal').modal('hide');
+            loadProfessionals();
                     resetProfessionalForm();
                 });
             } else {
@@ -2841,7 +3003,14 @@
                 fetch(`${API_ROOT}/admin/professionals/${id}`, {
                     method: 'DELETE'
                 })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(errorData => {
+                            throw new Error(errorData.details || errorData.error || 'Failed to delete professional');
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.ok) {
                         Swal.fire('Deleted!', 'Professional has been deleted.', 'success');
@@ -2852,11 +3021,213 @@
                 })
                 .catch(error => {
                     console.error('Error deleting professional:', error);
-                    Swal.fire('Error!', 'Failed to delete professional.', 'error');
+                    
+                    // Check if it's a conflict error with active bookings
+                    if (error.message && error.message.includes('active booking')) {
+                        Swal.fire({
+                            title: 'Delete Professional with Active Bookings?',
+                            text: `${error.message}\n\nThis will automatically cancel all active bookings and delete the professional.`,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Yes, Delete Anyway',
+                            cancelButtonText: 'Cancel',
+                            confirmButtonColor: '#d33',
+                            cancelButtonColor: '#3085d6'
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                // Cancel all bookings and delete professional
+                                cancelAllBookingsAndDelete(id);
+                            }
+                        });
+                    } else {
+                        Swal.fire('Cannot Delete Professional', error.message, 'warning');
+                    }
                 });
             }
         });
     };
+
+    /**
+     * Cancel all bookings and delete professional
+     */
+    function cancelAllBookingsAndDelete(professionalId) {
+        // Show loading
+        Swal.fire({
+            title: 'Processing...',
+            text: 'Cancelling bookings and deleting professional',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        // First cancel all bookings, then delete professional
+        fetch(`${API_ROOT}/admin/professionals/${professionalId}/cancel-bookings`, {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.ok) {
+                // Now delete the professional
+                return fetch(`${API_ROOT}/admin/professionals/${professionalId}`, {
+                    method: 'DELETE'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to cancel bookings');
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.ok) {
+                Swal.fire('Success!', 'Professional deleted and all bookings cancelled.', 'success');
+                loadProfessionals();
+            } else {
+                throw new Error(data.error || 'Failed to delete professional');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Swal.fire('Error!', error.message, 'error');
+        });
+    }
+
+    /**
+     * Show transfer bookings dialog
+     */
+    function showTransferBookingsDialog(professionalId) {
+        // First get available professionals to transfer to
+        fetch(`${API_ROOT}/admin/professionals`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.professionals && data.professionals.length > 1) {
+                    const availableProfessionals = data.professionals.filter(p => p.id != professionalId);
+                    
+                    if (availableProfessionals.length === 0) {
+                        Swal.fire('No Available Professionals', 'There are no other professionals to transfer bookings to.', 'warning');
+                        return;
+                    }
+
+                    // Create options HTML
+                    const optionsHtml = availableProfessionals.map(prof => 
+                        `<option value="${prof.id}">${prof.first_name} ${prof.last_name} (${prof.specialization})</option>`
+                    ).join('');
+
+                    Swal.fire({
+                        title: 'Transfer Bookings',
+                        html: `
+                            <div class="text-left">
+                                <p>Select a professional to transfer all active bookings to:</p>
+                                <select id="transferProfessional" class="form-control mt-3">
+                                    ${optionsHtml}
+                                </select>
+                                <p class="mt-3 text-muted"><small>All active bookings will be transferred to the selected professional.</small></p>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Transfer & Delete',
+                        cancelButtonText: 'Cancel',
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#6c757d',
+                        preConfirm: () => {
+                            const selectedId = document.getElementById('transferProfessional').value;
+                            if (!selectedId) {
+                                Swal.showValidationMessage('Please select a professional');
+                                return false;
+                            }
+                            return selectedId;
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            transferBookingsAndDelete(professionalId, result.value);
+                        }
+                    });
+                } else {
+                    Swal.fire('No Available Professionals', 'There are no other professionals to transfer bookings to.', 'warning');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading professionals:', error);
+                Swal.fire('Error!', 'Failed to load available professionals.', 'error');
+            });
+    }
+
+    /**
+     * Transfer bookings and delete professional
+     */
+    function transferBookingsAndDelete(fromProfessionalId, toProfessionalId) {
+        Swal.fire({
+            title: 'Processing...',
+            text: 'Transferring bookings and deleting professional',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: () => {
+                Swal.showLoading();
+            }
+        });
+
+        fetch(`${API_ROOT}/admin/professionals/${fromProfessionalId}/transfer-bookings`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                to_professional_id: toProfessionalId
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.ok) {
+                // Now delete the professional
+                return fetch(`${API_ROOT}/admin/professionals/${fromProfessionalId}`, {
+                    method: 'DELETE'
+                });
+            } else {
+                throw new Error(data.error || 'Failed to transfer bookings');
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.ok) {
+                Swal.fire('Success!', 'Bookings transferred and professional deleted.', 'success');
+                loadProfessionals();
+            } else {
+                throw new Error(data.error || 'Failed to delete professional');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Swal.fire('Error!', error.message, 'error');
+        });
+    }
 
     window.toggleProfessionalStatus = toggleProfessionalStatus;
 
@@ -3395,6 +3766,72 @@
             });
         }, 1000);
     }
+
+    /**
+     * Delete booking permanently
+     */
+    window.deleteBooking = function(bookingId) {
+        Swal.fire({
+            title: 'Delete Booking',
+            text: 'Are you sure you want to permanently delete this booking? This action cannot be undone!',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Delete',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#6b7280'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // Show loading
+                Swal.fire({
+                    title: 'Deleting...',
+                    text: 'Please wait while we delete the booking.',
+                    allowOutsideClick: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                    }
+                });
+
+                // Call delete booking API
+                fetch(`${API_ROOT}/admin/bookings/${bookingId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(`HTTP ${response.status}: ${text}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.ok) {
+                        Swal.fire({
+                            title: 'Success!',
+                            text: 'Booking has been deleted permanently.',
+                            icon: 'success',
+                            confirmButtonText: 'OK'
+                        }).then(() => {
+                            // Reload bookings
+                            loadBookings();
+                        });
+                    } else {
+                        throw new Error(data.error || 'Failed to delete booking');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting booking:', error);
+                    Swal.fire({
+                        title: 'Error!',
+                        text: error.message,
+                        icon: 'error',
+                        confirmButtonText: 'OK'
+                    });
+                });
+            }
+        });
+    };
 
 })();
 

@@ -10,6 +10,174 @@
   
   const API_BASE_URL = getAPIBaseUrl();
   
+  // Display emergency booking notification
+  function displayEmergencyBooking(bookingData) {
+    const emergencyCard = document.createElement("div");
+    emergencyCard.className = "emergency-booking-card";
+    emergencyCard.innerHTML = `
+      <div class="emergency-booking-content">
+        <div class="emergency-icon">🚨</div>
+        <h3>Emergency Support Scheduled</h3>
+        <p>Based on our conversation, I've automatically scheduled you with a mental health professional for immediate support.</p>
+        <div class="emergency-details">
+          <div class="detail-item">
+            <strong>Professional:</strong> ${bookingData.professional?.first_name || 'Dr. Professional'} ${bookingData.professional?.last_name || ''}
+          </div>
+          <div class="detail-item">
+            <strong>Specialization:</strong> ${bookingData.professional?.specialization || 'Mental Health Professional'}
+          </div>
+          <div class="detail-item">
+            <strong>Booking ID:</strong> ${bookingData.booking_id || 'N/A'}
+          </div>
+        </div>
+        <div class="emergency-info">
+          <p><strong>You will receive SMS confirmation shortly.</strong></p>
+          <p>If this is a life-threatening emergency, please call 112 or go to your nearest emergency room.</p>
+        </div>
+      </div>
+    `;
+    
+    // Add styling
+    emergencyCard.style.cssText = `
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 16px 0;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+      animation: slideIn 0.3s ease-out;
+      border-left: 4px solid #fbbf24;
+    `;
+    
+    // Add emergency-specific CSS
+    if (!document.getElementById('emergency-animations')) {
+      const style = document.createElement('style');
+      style.id = 'emergency-animations';
+      style.textContent = `
+        .emergency-booking-content {
+          text-align: center;
+        }
+        .emergency-icon {
+          font-size: 48px;
+          margin-bottom: 16px;
+          animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+        }
+        .emergency-booking-content h3 {
+          margin: 0 0 12px 0;
+          font-size: 18px;
+          font-weight: 600;
+        }
+        .emergency-booking-content p {
+          margin: 0 0 20px 0;
+          opacity: 0.9;
+          line-height: 1.5;
+        }
+        .emergency-details {
+          background: rgba(255,255,255,0.1);
+          padding: 16px;
+          border-radius: 8px;
+          margin: 16px 0;
+          text-align: left;
+        }
+        .detail-item {
+          margin-bottom: 8px;
+        }
+        .detail-item:last-child {
+          margin-bottom: 0;
+        }
+        .emergency-info {
+          background: rgba(251, 191, 36, 0.2);
+          padding: 12px;
+          border-radius: 8px;
+          margin-top: 16px;
+        }
+        .emergency-info p {
+          margin: 8px 0;
+          font-size: 14px;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    chatContainer.appendChild(emergencyCard);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+  
+  // Request booking function
+  async function requestBooking() {
+    try {
+      const payload = { conv_id: convId };
+      if (account) payload.account = account;
+      
+      const resp = await api("/api/request-booking", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      if (resp.success) {
+        // Remove booking prompt
+        const bookingCard = document.querySelector('.booking-prompt-card');
+        if (bookingCard) bookingCard.remove();
+        
+        // Show success message
+        appendMessage("assistant", `✅ ${resp.message}`);
+        
+        // Show booking details
+        const bookingDetails = document.createElement("div");
+        bookingDetails.className = "booking-success-card";
+        bookingDetails.innerHTML = `
+          <div class="booking-success-content">
+            <div class="success-icon">✅</div>
+            <h3>Booking Confirmed!</h3>
+            <div class="booking-details">
+              <p><strong>Professional:</strong> ${resp.professional.first_name} ${resp.professional.last_name}</p>
+              <p><strong>Specialization:</strong> ${resp.professional.specialization}</p>
+              <p><strong>Booking ID:</strong> ${resp.booking_id}</p>
+              <p><strong>Risk Level:</strong> ${resp.risk_level}</p>
+            </div>
+            <p class="success-message">You will receive SMS confirmation shortly with session details.</p>
+          </div>
+        `;
+        
+        bookingDetails.style.cssText = `
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          padding: 20px;
+          border-radius: 12px;
+          margin: 16px 0;
+          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+          animation: slideIn 0.3s ease-out;
+        `;
+        
+        chatContainer.appendChild(bookingDetails);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+      } else {
+        appendMessage("assistant", `❌ ${resp.error || 'Booking request failed. Please try again.'}`);
+      }
+    } catch (error) {
+      console.error("Booking request error:", error);
+      appendMessage("assistant", "❌ Unable to process booking request. Please try again later.");
+    }
+  }
+  
+  // Decline booking function
+  function declineBooking() {
+    const bookingCard = document.querySelector('.booking-prompt-card');
+    if (bookingCard) bookingCard.remove();
+    
+    appendMessage("assistant", "No problem! I'm here to continue our conversation. Feel free to reach out anytime if you'd like to speak with a professional.");
+  }
+  
+  // Make functions globally available
+  window.requestBooking = requestBooking;
+  window.declineBooking = declineBooking;
+  
   // Check authentication
   const account = localStorage.getItem("aimhsa_account");
   const professionalData = localStorage.getItem("aimhsa_professional");
@@ -334,7 +502,21 @@
       
       // Handle booking question from backend
       if (resp.ask_booking) {
-        displayBookingQuestion(resp.ask_booking);
+        displayBookingQuestion(resp.booking_question || {
+          message: "Based on our conversation, I believe you might benefit from speaking with a qualified mental health professional. Would you like me to schedule a session for you?",
+          options: ["Yes, Schedule Session", "No, Continue Chat"]
+        });
+      }
+      
+      // Handle automatic booking creation
+      if (resp.booking_created) {
+        displayEmergencyBooking({
+          booking_id: resp.booking_id,
+          professional_name: resp.professional_name,
+          specialization: resp.specialization,
+          session_type: resp.session_type,
+          scheduled_datetime: resp.scheduled_datetime
+        });
       }
       
       if (resp.id && resp.id !== convId) {
@@ -896,6 +1078,22 @@
   // Risk assessment is handled in backend only (no display)
   // But show booking confirmation to user
   function displayBookingQuestion(bookingQuestion) {
+    // Safety check for undefined parameter
+    if (!bookingQuestion) {
+      bookingQuestion = {
+        message: "Based on our conversation, I believe you might benefit from speaking with a qualified mental health professional. Would you like me to schedule a session for you?",
+        options: ["Yes, Schedule Session", "No, Continue Chat"]
+      };
+    }
+    
+    // Ensure required properties exist
+    if (!bookingQuestion.message) {
+      bookingQuestion.message = "Based on our conversation, I believe you might benefit from speaking with a qualified mental health professional. Would you like me to schedule a session for you?";
+    }
+    if (!bookingQuestion.options || !Array.isArray(bookingQuestion.options) || bookingQuestion.options.length < 2) {
+      bookingQuestion.options = ["Yes, Schedule Session", "No, Continue Chat"];
+    }
+    
     // Create booking question card
     const questionCard = document.createElement('div');
     questionCard.className = 'booking-question-card';
@@ -992,7 +1190,8 @@
   // Removed language indicator UI for a cleaner experience
   
   function displayEmergencyBooking(booking) {
-    const scheduledTime = new Date(booking.scheduled_time * 1000).toLocaleString();
+    // Support both scheduled_time and scheduled_datetime
+    const scheduledTime = new Date((booking.scheduled_time || booking.scheduled_datetime) * 1000).toLocaleString();
     
     // Create emergency booking notification
     const bookingCard = document.createElement('div');
@@ -1013,10 +1212,10 @@
         <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Emergency Session Scheduled</h3>
       </div>
       <div style="background: rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-        <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Professional:</strong> ${booking.professional_name}</p>
-        <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Specialization:</strong> ${booking.specialization}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Professional:</strong> ${booking.professional_name || (booking.professional ? `${booking.professional.first_name || ''} ${booking.professional.last_name || ''}` : 'Being assigned')}</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Specialization:</strong> ${booking.specialization || (booking.professional ? booking.professional.specialization : 'Mental Health Professional')}</p>
         <p style="margin: 0 0 8px 0; font-size: 14px;"><strong>Scheduled:</strong> ${scheduledTime}</p>
-        <p style="margin: 0; font-size: 14px;"><strong>Session Type:</strong> ${booking.session_type}</p>
+        <p style="margin: 0; font-size: 14px;"><strong>Session Type:</strong> ${booking.session_type || booking.professional?.session_type || 'Emergency Consultation'}</p>
       </div>
       <p style="margin: 0; font-size: 14px; opacity: 0.9;">
         A mental health professional has been automatically assigned to provide immediate support. 

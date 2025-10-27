@@ -75,11 +75,11 @@ def add_sample_data():
         
         for user in sample_users:
             try:
-                conn.execute("""
+        conn.execute("""
                     INSERT OR REPLACE INTO users 
                     (username, password_hash, email, fullname, telephone, province, district, created_ts)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
+        """, (
                     user["username"],
                     generate_password_hash("password123"),
                     user["email"],
@@ -148,11 +148,11 @@ def add_sample_data():
                 (booking_id, conv_id, user_account, professional_id, risk_level, risk_score, booking_status, 
                  notes, conversation_summary, created_ts, updated_ts)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                booking_id,
-                conv_id,
+        """, (
+            booking_id,
+            conv_id,
                 session["user_account"],
-                professional_id,
+            professional_id,
                 session["risk_level"],
                 session["risk_score"],
                 session["booking_status"],
@@ -212,9 +212,9 @@ def add_sample_data():
                 INSERT OR REPLACE INTO professional_notifications
                 (professional_id, booking_id, title, message, priority, is_read, notification_type, created_ts)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                professional_id,
-                booking_id,
+        """, (
+            professional_id,
+            booking_id,
                 notification["title"],
                 notification["message"],
                 notification["priority"],

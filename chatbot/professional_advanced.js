@@ -143,7 +143,7 @@
         currentSection = section;
         
         // Load section-specific data
-        loadSectionData(section);
+            loadSectionData(section);
     }
 
     /**
@@ -173,7 +173,7 @@
                 break;
         }
     }
-
+    
     /**
      * Load dashboard statistics
      */
@@ -198,7 +198,7 @@
                 console.error('❌ Error loading dashboard stats:', error);
             });
     }
-
+    
     /**
      * Load sessions
      */
@@ -211,15 +211,15 @@
             .then(response => response.json())
             .then(data => {
                 console.log('📅 Sessions data received:', data);
-                tbody.empty();
-                
+        tbody.empty();
+
                 if (data.sessions && data.sessions.length > 0) {
                     data.sessions.forEach(session => {
                         const riskClass = getRiskClass(session.risk_level);
                         const statusClass = getStatusClass(session.booking_status);
                         const createdDate = new Date(session.created_ts * 1000).toLocaleDateString();
                         
-                        const row = `
+            const row = `
                             <tr class="session-row" data-id="${session.booking_id}">
                                 <td>
                                     <div class="d-flex align-items-center">
@@ -271,9 +271,9 @@
                                         </button>
                                     </div>
                                 </td>
-                            </tr>
-                        `;
-                        tbody.append(row);
+                </tr>
+            `;
+            tbody.append(row);
                     });
                 } else {
                     tbody.html('<tr><td colspan="7" class="text-center text-muted"><i class="fas fa-calendar-times mr-2"></i>No sessions found</td></tr>');
@@ -282,7 +282,7 @@
             .catch(error => {
                 console.error('❌ Error loading sessions:', error);
                 tbody.html('<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading sessions</td></tr>');
-            });
+        });
     }
 
     /**
@@ -297,14 +297,14 @@
             .then(response => response.json())
             .then(data => {
                 console.log('👥 Patients data received:', data);
-                tbody.empty();
-                
+        tbody.empty();
+
                 if (data.users && data.users.length > 0) {
                     data.users.forEach(user => {
                         const riskClass = getRiskClass(user.highest_risk_level);
                         const lastSessionDate = user.last_session_date ? new Date(user.last_session_date * 1000).toLocaleDateString() : 'N/A';
                         
-                        const row = `
+            const row = `
                             <tr class="patient-row" data-username="${user.username}">
                                 <td>
                                     <div class="d-flex align-items-center">
@@ -349,19 +349,19 @@
                                     <div class="btn-group" role="group">
                                         <button class="btn btn-sm btn-primary" onclick="viewPatientProfile('${user.username}')" title="View Profile">
                                             <i class="fas fa-user"></i>
-                                        </button>
+                        </button>
                                         <button class="btn btn-sm btn-success" onclick="scheduleSession('${user.username}')" title="Schedule Session">
                                             <i class="fas fa-calendar-plus"></i>
-                                        </button>
+                        </button>
                                         <button class="btn btn-sm btn-info" onclick="viewPatientHistory('${user.username}')" title="View History">
                                             <i class="fas fa-history"></i>
                                         </button>
                                     </div>
-                                </td>
-                            </tr>
-                        `;
-                        tbody.append(row);
-                    });
+                    </td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
                 } else {
                     tbody.html('<tr><td colspan="7" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No patients found</td></tr>');
                 }
@@ -384,19 +384,19 @@
             .then(response => response.json())
             .then(data => {
                 console.log('🔔 Notifications data received:', data);
-                container.empty();
-                
+        container.empty();
+
                 if (data.notifications && data.notifications.length > 0) {
                     data.notifications.forEach(notification => {
                         const isRead = notification.is_read ? 'read' : 'unread';
                         const priorityClass = notification.priority === 'high' ? 'danger' : notification.priority === 'medium' ? 'warning' : 'info';
                         const createdDate = new Date(notification.created_ts * 1000).toLocaleString();
                         
-                        const notificationHtml = `
+            const notificationHtml = `
                             <div class="alert alert-${priorityClass} alert-dismissible ${isRead}" data-id="${notification.id}">
                                 <button type="button" class="close" onclick="markNotificationRead(${notification.id})">
                                     <span aria-hidden="true">&times;</span>
-                                </button>
+                            </button>
                                 <h5><i class="fas fa-bell mr-2"></i>${notification.title}</h5>
                                 <p>${notification.message}</p>
                                 <small class="text-muted">
@@ -404,11 +404,11 @@
                                     ${notification.user_account ? ` | <i class="fas fa-user mr-1"></i>${notification.user_account}` : ''}
                                     ${notification.risk_level ? ` | <i class="fas fa-exclamation-triangle mr-1"></i>${notification.risk_level.toUpperCase()}` : ''}
                                 </small>
-                            </div>
-                        `;
-                        container.append(notificationHtml);
-                    });
-                } else {
+                </div>
+            `;
+            container.append(notificationHtml);
+        });
+        } else {
                     container.html('<div class="text-center text-muted"><i class="fas fa-bell-slash mr-2"></i>No notifications found</div>');
                 }
             })
@@ -568,10 +568,10 @@
                 Swal.fire({
                     title: 'Logged Out!',
                     text: 'You have been successfully logged out.',
-                    icon: 'success',
+            icon: 'success',
                     timer: 2000,
                     showConfirmButton: false
-                }).then(() => {
+        }).then(() => {
                     // Redirect to login page
                     window.location.href = '/login.html';
                 });
@@ -641,7 +641,7 @@
     window.acceptSession = function(bookingId) {
         console.log('✅ Accepting session:', bookingId);
         
-        Swal.fire({
+            Swal.fire({
             title: 'Accept Session',
             html: `
                 <div class="form-group">
@@ -679,7 +679,7 @@
                     if (data.ok) {
                         Swal.fire('Success!', 'Session accepted successfully', 'success');
                         loadSessions();
-                    } else {
+        } else {
                         Swal.fire('Error!', data.error || 'Failed to accept session', 'error');
                     }
                 })
@@ -694,7 +694,7 @@
     window.declineSession = function(bookingId) {
         console.log('❌ Declining session:', bookingId);
         
-        Swal.fire({
+            Swal.fire({
             title: 'Decline Session',
             html: `
                 <div class="form-group">
@@ -712,7 +712,7 @@
                     <textarea id="declineNotes" class="form-control" rows="3" placeholder="Provide additional details..."></textarea>
                 </div>
             `,
-            showCancelButton: true,
+                showCancelButton: true,
             confirmButtonText: 'Decline Session',
             confirmButtonColor: '#dc3545',
             preConfirm: () => {
@@ -726,8 +726,8 @@
                 
                 return { reason, notes };
             }
-        }).then((result) => {
-            if (result.isConfirmed) {
+            }).then((result) => {
+                if (result.isConfirmed) {
                 fetch(`${API_ROOT}/professional/sessions/${bookingId}/status`, {
                     method: 'PUT',
                     headers: {
