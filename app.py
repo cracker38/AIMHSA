@@ -23,6 +23,15 @@ from typing import Dict, List, Tuple, Optional
 from translation_service import translation_service
 from sms_service import initialize_sms_service, get_sms_service
 
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+# Optional imports for OCR functionality
+try:
+    import pytesseract
+except ImportError:
+    pytesseract = None
+
 from config import current_config
 
 # Initialize Hugging Face AI service
@@ -127,6 +136,12 @@ FROM_EMAIL = current_config.FROM_EMAIL
 # --- SMS Configuration ---
 HDEV_SMS_API_ID = current_config.HDEV_SMS_API_ID
 HDEV_SMS_API_KEY = current_config.HDEV_SMS_API_KEY
+
+# --- OpenAI Client Configuration ---
+openai_client = OpenAI(
+    base_url=current_config.OLLAMA_BASE_URL,
+    api_key=current_config.OLLAMA_API_KEY
+)
 
 def send_password_reset_email(to_email, username, reset_code):
     """
