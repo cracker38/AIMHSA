@@ -911,7 +911,9 @@ CONTEXT:
         elif ai_service:
             # Use Hugging Face AI service
             try:
-                answer = ai_service.generate_response(messages)
+                # Create system prompt for mental health support
+                system_prompt = "You are AIMHSA, a supportive mental-health companion for Rwanda. Be warm, brief, and evidence-informed. Do NOT diagnose or prescribe medications. Encourage professional care when appropriate. Answer in clear, simple English only."
+                answer = ai_service.generate_response(messages, system_prompt)
             except Exception as hf_error:
                 print(f"Hugging Face AI error: {hf_error}")
                 # Fallback to simple response
