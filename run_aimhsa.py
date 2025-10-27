@@ -109,11 +109,24 @@ SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client for Ollama
-openai_client = OpenAI(
-    base_url=OLLAMA_BASE_URL,
-    api_key=OLLAMA_API_KEY
-)
+# Initialize OpenAI client for Ollama (fallback to Hugging Face compatible)
+try:
+    openai_client = OpenAI(
+        base_url=OLLAMA_BASE_URL,
+        api_key=OLLAMA_API_KEY
+    )
+    print("✅ Using Ollama OpenAI client")
+except Exception as e:
+    print(f"⚠️ Ollama not available: {e}")
+    # Fallback to Hugging Face compatible client
+    try:
+        from hf_ai_service import get_ai_service
+        ai_service = get_ai_service()
+        openai_client = None  # Will use ai_service instead
+        print("✅ Using Hugging Face AI service")
+    except Exception as hf_error:
+        print(f"❌ Hugging Face AI service failed: {hf_error}")
+        ai_service = None
 
 # Initialize SMS service if credentials are provided
 if HDEV_SMS_API_ID and HDEV_SMS_API_KEY:
@@ -235,12 +248,21 @@ def retrieve(query: str, k: int = 4):
         return []
     
     try:
-        # Use OpenAI client for embeddings
-        response = openai_client.embeddings.create(
-            model=EMBED_MODEL,
-            input=query
-        )
-        q_emb = np.array([response.data[0].embedding], dtype=np.float32)
+        # Use available embedding service
+        if openai_client:
+            # Use OpenAI client for embeddings
+            response = openai_client.embeddings.create(
+                model=EMBED_MODEL,
+                input=query
+            )
+            q_emb = np.array([response.data[0].embedding], dtype=np.float32)
+        elif ai_service:
+            # Use Hugging Face embeddings (simplified fallback)
+            # For now, return empty to avoid errors
+            return []
+        else:
+            return []
+            
         sims = cosine_similarity(chunk_embeddings, q_emb)[:,0]
         top_idx = sims.argsort()[-k:][::-1]
         return [(chunk_texts[i], chunk_sources[i]) for i in top_idx]
@@ -761,14 +783,22 @@ CONTEXT:
     messages[-1] = {"role": "user", "content": user_prompt}
     
     try:
-        # Get AI response using OpenAI client
-        response = openai_client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=messages,
-            temperature=0.7,
-            max_tokens=1000
-        )
-        answer = response.choices[0].message.content
+        # Get AI response using available service
+        if openai_client:
+            # Use Ollama OpenAI client
+            response = openai_client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            answer = response.choices[0].message.content
+        elif ai_service:
+            # Use Hugging Face AI service
+            answer = ai_service.generate_response(messages)
+        else:
+            # Fallback response
+            answer = "I'm sorry, I'm having trouble accessing my AI model right now. However, I can still help you with mental health resources in Rwanda. Please contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703 for immediate support."
         
         # Save conversation
         save_message(conv_id, "user", query)
@@ -1142,19 +1172,33 @@ def api_session():
 # ============================================================================
 
 def test_ollama_connection():
-    """Test connection to Ollama"""
+    """Test connection to Ollama or Hugging Face AI service"""
     try:
-        print("🔗 Testing Ollama connection...")
-        response = openai_client.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[{"role": "user", "content": "Hello"}],
-            max_tokens=10
-        )
-        print("✅ Ollama connection successful!")
-        return True
+        if openai_client:
+            print("🔗 Testing Ollama connection...")
+            response = openai_client.chat.completions.create(
+                model=CHAT_MODEL,
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=10
+            )
+            print("✅ Ollama connection successful!")
+            return True
+        elif ai_service:
+            print("🔗 Testing Hugging Face AI service...")
+            test_response = ai_service.generate_response([{"role": "user", "content": "Hello"}])
+            if test_response and len(test_response.strip()) > 0:
+                print("✅ Hugging Face AI service successful!")
+                return True
+            else:
+                print("❌ Hugging Face AI service returned empty response")
+                return False
+        else:
+            print("❌ No AI service available")
+            return False
     except Exception as e:
-        print(f"❌ Ollama connection failed: {e}")
-        print("💡 Make sure Ollama is running: ollama serve")
+        print(f"❌ AI service connection failed: {e}")
+        if openai_client:
+            print("💡 Make sure Ollama is running: ollama serve")
         return False
 
 @app.route('/history')
@@ -2634,9 +2678,15 @@ def main():
     print("🧠 AIMHSA - AI Mental Health Support Assistant")
     print("="*60)
     print(f"🌐 Running on: http://{args.host}:{args.port}")
-    print(f"🤖 Ollama URL: {OLLAMA_BASE_URL}")
-    print(f"🧠 Chat Model: {CHAT_MODEL}")
-    print(f"🔍 Embed Model: {EMBED_MODEL}")
+    if openai_client:
+        print(f"🤖 Ollama URL: {OLLAMA_BASE_URL}")
+        print(f"🧠 Chat Model: {CHAT_MODEL}")
+        print(f"🔍 Embed Model: {EMBED_MODEL}")
+    elif ai_service:
+        print("🤖 Using Hugging Face AI Service")
+        print("🧠 Model: microsoft/DialoGPT-medium")
+    else:
+        print("⚠️ No AI service available - using fallback responses")
     print("="*60)
     
     # Test Ollama connection
