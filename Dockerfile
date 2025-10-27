@@ -19,19 +19,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     curl \
 && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama
-RUN curl -fsSL https://ollama.com/install.sh | sh
-
-# Create startup script
-RUN echo '#!/bin/bash\n\
-# Start Ollama in background\n\
-ollama serve &\n\
-sleep 5\n\
-# Pull the model\n\
-ollama pull llama3.2:3b\n\
-# Start the Flask app\n\
-exec python app.py\n\
-' > /app/start.sh && chmod +x /app/start.sh
+# Install Hugging Face transformers and models
+RUN python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('microsoft/DialoGPT-medium'); AutoModelForCausalLM.from_pretrained('microsoft/DialoGPT-medium')"
 
 # Ensure modern pip/setuptools/wheel before installing heavy requirements
 RUN python -m pip install --upgrade pip setuptools wheel
@@ -62,4 +51,4 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 EXPOSE 7860
 
-CMD ["/app/start.sh"]
+CMD ["python", "app.py"]
