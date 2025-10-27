@@ -22,6 +22,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # Install Hugging Face transformers and models
 RUN python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('microsoft/DialoGPT-medium'); AutoModelForCausalLM.from_pretrained('microsoft/DialoGPT-medium')"
 
+# Install OpenAI client and numpy for embeddings
+RUN pip install openai numpy
+
 # Ensure modern pip/setuptools/wheel before installing heavy requirements
 RUN python -m pip install --upgrade pip setuptools wheel
 
@@ -51,4 +54,4 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 EXPOSE 7860
 
-CMD ["python", "app.py"]
+CMD ["python", "app_hf.py"]
