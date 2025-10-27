@@ -23,7 +23,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 RUN python -m pip install --upgrade pip setuptools wheel
 
 # Install basic dependencies first
-RUN pip install openai numpy transformers torch
+RUN pip install openai numpy transformers torch sentence-transformers
 
 # Install Hugging Face transformers and models
 RUN python -c "from transformers import AutoTokenizer, AutoModelForCausalLM; AutoTokenizer.from_pretrained('microsoft/DialoGPT-medium'); AutoModelForCausalLM.from_pretrained('microsoft/DialoGPT-medium')"
