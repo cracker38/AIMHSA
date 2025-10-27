@@ -54,4 +54,4 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 EXPOSE 7860
 
-CMD ["python", "app_hf.py"]
+CMD ["python", "run_aimhsa.py"]

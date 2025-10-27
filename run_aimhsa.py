@@ -221,7 +221,7 @@ def init_storage():
     finally:
         conn.close()
     
-    # Load embeddings
+    # Load embeddings with error handling
     global chunk_texts, chunk_sources, chunk_embeddings
     try:
         with open(EMBED_FILE, "r", encoding="utf-8") as f:
@@ -231,7 +231,12 @@ def init_storage():
         chunk_embeddings = np.array([c["embedding"] for c in chunks_data], dtype=np.float32)
         print(f"✅ Loaded {len(chunk_texts)} embedding chunks")
     except FileNotFoundError:
-        print("⚠️  Embeddings file not found. RAG features will be limited.")
+        print("⚠️ Embeddings file not found - RAG features disabled")
+        chunk_texts = []
+        chunk_sources = []
+        chunk_embeddings = None
+    except Exception as e:
+        print(f"⚠️ Error loading embeddings: {e}")
         chunk_texts = []
         chunk_sources = []
         chunk_embeddings = None
