@@ -16,7 +16,22 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     pkg-config \
     libgomp1 \
     git \
- && rm -rf /var/lib/apt/lists/*
+    curl \
+&& rm -rf /var/lib/apt/lists/*
+
+# Install Ollama
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Create startup script
+RUN echo '#!/bin/bash\n\
+# Start Ollama in background\n\
+ollama serve &\n\
+sleep 5\n\
+# Pull the model\n\
+ollama pull llama3.2:3b\n\
+# Start the Flask app\n\
+exec python app.py\n\
+' > /app/start.sh && chmod +x /app/start.sh
 
 # Ensure modern pip/setuptools/wheel before installing heavy requirements
 RUN python -m pip install --upgrade pip setuptools wheel
@@ -47,4 +62,4 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 EXPOSE 7860
 
-CMD ["python", "app.py"]
+CMD ["/app/start.sh"]
