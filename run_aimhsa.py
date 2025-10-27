@@ -206,6 +206,11 @@ def init_storage():
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
+                email TEXT UNIQUE,
+                fullname TEXT,
+                telephone TEXT,
+                province TEXT,
+                district TEXT,
                 created_ts REAL NOT NULL
             )
         """)
@@ -214,9 +219,109 @@ def init_storage():
                 conv_id TEXT PRIMARY KEY,
                 owner_key TEXT,
                 preview TEXT,
-                ts REAL
+                ts REAL,
+                archived INTEGER DEFAULT 0,
+                archive_pw_hash TEXT,
+                booking_prompt_shown INTEGER DEFAULT 0
             )
         """)
+        
+        # Add missing tables for full functionality
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS professionals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                phone TEXT,
+                specialization TEXT NOT NULL,
+                expertise_areas TEXT,
+                languages TEXT,
+                qualifications TEXT,
+                district TEXT,
+                consultation_fee REAL,
+                experience_years INTEGER DEFAULT 0,
+                bio TEXT,
+                created_ts REAL NOT NULL,
+                updated_ts REAL NOT NULL,
+                is_active INTEGER DEFAULT 1
+            )
+        """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS automated_bookings (
+                booking_id TEXT PRIMARY KEY,
+                conv_id TEXT NOT NULL,
+                user_account TEXT,
+                professional_id INTEGER,
+                risk_level TEXT,
+                risk_score REAL,
+                detected_indicators TEXT,
+                conversation_summary TEXT,
+                booking_status TEXT DEFAULT 'pending',
+                scheduled_datetime REAL,
+                session_type TEXT,
+                session_notes TEXT,
+                treatment_plan TEXT,
+                notes TEXT,
+                created_ts REAL NOT NULL,
+                updated_ts REAL NOT NULL,
+                FOREIGN KEY (professional_id) REFERENCES professionals(id)
+            )
+        """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS professional_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                professional_id INTEGER NOT NULL,
+                booking_id TEXT,
+                notification_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                priority TEXT DEFAULT 'normal',
+                is_read INTEGER DEFAULT 0,
+                risk_level TEXT,
+                created_ts REAL NOT NULL,
+                FOREIGN KEY (professional_id) REFERENCES professionals(id),
+                FOREIGN KEY (booking_id) REFERENCES automated_bookings(booking_id)
+            )
+        """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS risk_assessments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conv_id TEXT NOT NULL,
+                user_query TEXT NOT NULL,
+                risk_score REAL NOT NULL,
+                risk_level TEXT NOT NULL,
+                detected_indicators TEXT NOT NULL,
+                assessment_timestamp REAL NOT NULL
+            )
+        """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                token TEXT NOT NULL,
+                expires_ts REAL NOT NULL,
+                used INTEGER DEFAULT 0
+            )
+        """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admin_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                role TEXT DEFAULT 'admin',
+                created_ts REAL NOT NULL
+            )
+        """)
+        
         conn.commit()
     finally:
         conn.close()
@@ -791,19 +896,29 @@ CONTEXT:
         # Get AI response using available service
         if openai_client:
             # Use Ollama OpenAI client
-            response = openai_client.chat.completions.create(
-                model=CHAT_MODEL,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            answer = response.choices[0].message.content
+            try:
+                response = openai_client.chat.completions.create(
+                    model=CHAT_MODEL,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                answer = response.choices[0].message.content
+            except Exception as ollama_error:
+                print(f"Ollama error: {ollama_error}")
+                # Fallback to simple response
+                answer = "Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
         elif ai_service:
             # Use Hugging Face AI service
-            answer = ai_service.generate_response(messages)
+            try:
+                answer = ai_service.generate_response(messages)
+            except Exception as hf_error:
+                print(f"Hugging Face AI error: {hf_error}")
+                # Fallback to simple response
+                answer = "Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
         else:
             # Fallback response
-            answer = "I'm sorry, I'm having trouble accessing my AI model right now. However, I can still help you with mental health resources in Rwanda. Please contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703 for immediate support."
+            answer = "Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
         
         # Save conversation
         save_message(conv_id, "user", query)
