@@ -1,132 +1,79 @@
 """
-Hugging Face AI Service for AIMHSA
-Uses Hugging Face transformers instead of Ollama
+AI Service for AIMHSA
+Uses OpenAI-compatible API for Ollama/Hugging Face inference
 """
 
 import os
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from openai import OpenAI
 from typing import List, Dict, Optional
 import logging
 
 class HuggingFaceAIService:
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.model_name = "microsoft/DialoGPT-medium"
-        self.tokenizer = None
-        self.model = None
-        self.pipeline = None
-        self._initialize_model()
+        self.openai_client = None
+        self._initialize_client()
     
-    def _initialize_model(self):
-        """Initialize the Hugging Face model"""
+    def _initialize_client(self):
+        """Initialize OpenAI-compatible client for Ollama"""
         try:
-            self.logger.info(f"Loading Hugging Face model: {self.model_name}")
+            self.logger.info("Initializing OpenAI-compatible client...")
             
-            # Use CPU for Hugging Face Spaces
-            device = "cpu"
+            # Get configuration from environment
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+            api_key = os.getenv("OLLAMA_API_KEY", "ollama")
             
-            # Load tokenizer and model
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float32,
-                device_map=device
+            self.openai_client = OpenAI(
+                base_url=base_url,
+                api_key=api_key
             )
             
-            # Create text generation pipeline
-            self.pipeline = pipeline(
-                "text-generation",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device=device,
-                max_length=512,
-                do_sample=True,
-                temperature=0.7,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
-            
-            self.logger.info("✅ Hugging Face model loaded successfully")
+            self.logger.info(f"✅ OpenAI-compatible client initialized with base URL: {base_url}")
             
         except Exception as e:
-            self.logger.error(f"❌ Failed to load Hugging Face model: {str(e)}")
-            self.pipeline = None
+            self.logger.error(f"❌ Failed to initialize OpenAI client: {str(e)}")
+            self.openai_client = None
     
     def generate_response(self, messages: List[Dict], system_prompt: str = "") -> str:
-        """Generate AI response using Hugging Face model"""
+        """Generate AI response using OpenAI-compatible API"""
         try:
-            if not self.pipeline:
-                return "I'm sorry, I'm having trouble accessing my AI model right now. However, I can still help you with mental health resources in Rwanda. Please contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703 for immediate support."
+            if not self.openai_client:
+                return self._get_fallback_response()
             
-            # Convert messages to conversation format
-            conversation_text = self._format_conversation(messages, system_prompt)
+            # Make sure messages list is not empty and properly formatted
+            if not messages or not isinstance(messages, list):
+                return self._get_fallback_response()
             
-            # Generate response
-            response = self.pipeline(
-                conversation_text,
-                max_new_tokens=150,
-                num_return_sequences=1,
+            # Call OpenAI-compatible API
+            response = self.openai_client.chat.completions.create(
+                model='llama3.2:3b',
+                messages=messages,
                 temperature=0.7,
-                do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id
+                top_p=0.9,
+                max_tokens=1024
             )
             
-            # Extract generated text
-            generated_text = response[0]['generated_text']
-            
-            # Extract only the new response part
-            new_response = generated_text[len(conversation_text):].strip()
-            
-            # Clean up the response
-            if new_response:
-                # Remove any incomplete sentences or repetitive text
-                lines = new_response.split('\n')
-                clean_response = lines[0].strip()
+            # Extract the response content
+            if response and response.choices and len(response.choices) > 0:
+                answer = response.choices[0].message.content
                 
-                # Ensure it's a reasonable length
-                if len(clean_response) > 200:
-                    clean_response = clean_response[:200] + "..."
-                
-                return clean_response if clean_response else "I understand you're reaching out for support. How can I help you today?"
-            else:
-                return "I understand you're reaching out for support. How can I help you today?"
+                # Validate and return the response
+                if answer and isinstance(answer, str) and answer.strip():
+                    return answer.strip()
+            
+            return self._get_fallback_response()
                 
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
-            return "I'm sorry, I'm having trouble accessing my AI model right now. However, I can still help you with mental health resources in Rwanda. Please contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703 for immediate support."
+            return self._get_fallback_response()
     
-    def _format_conversation(self, messages: List[Dict], system_prompt: str = "") -> str:
-        """Format conversation for the model"""
-        try:
-            conversation = ""
-            
-            if system_prompt:
-                conversation += f"System: {system_prompt}\n"
-            
-            # Add recent messages (last 5 to keep context manageable)
-            recent_messages = messages[-5:] if len(messages) > 5 else messages
-            
-            for msg in recent_messages:
-                role = msg.get('role', 'user')
-                content = msg.get('content', '')
-                
-                if role == 'user':
-                    conversation += f"Human: {content}\n"
-                elif role == 'assistant':
-                    conversation += f"AI: {content}\n"
-            
-            # Add prompt for AI response
-            conversation += "AI: "
-            
-            return conversation
-            
-        except Exception as e:
-            self.logger.error(f"Error formatting conversation: {str(e)}")
-            return "Human: Hello\nAI: "
+    def _get_fallback_response(self) -> str:
+        """Get a helpful fallback response when AI is unavailable"""
+        return "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703."
     
     def is_available(self) -> bool:
         """Check if the AI service is available"""
-        return self.pipeline is not None
+        return self.openai_client is not None
 
 # Global AI service instance
 ai_service = None
