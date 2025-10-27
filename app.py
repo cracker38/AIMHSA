@@ -25,11 +25,9 @@ from sms_service import initialize_sms_service, get_sms_service
 
 from config import current_config
 
-# Initialize OpenAI client for Ollama
-openai_client = OpenAI(
-    base_url=current_config.OLLAMA_BASE_URL,
-    api_key=current_config.OLLAMA_API_KEY
-)
+# Initialize Hugging Face AI service
+from hf_ai_service import get_ai_service
+ai_service = get_ai_service()
 
 # --- Minimal retry helpers for OpenAI calls ---
 def _retry_openai_call(func, *args, _retries=1, _delay=0.5, **kwargs):
@@ -673,13 +671,13 @@ class RiskDetector:
             Respond in JSON format: {{"risk_score": 0.0-1.0, "indicators": ["indicator1", "indicator2"]}}
             """
             
-            response = _retry_openai_call(openai_client.chat.completions.create, model=CHAT_MODEL, messages=[
+            # Use Hugging Face AI service for risk assessment
+            messages = [
                 {"role": "system", "content": "You are a mental health risk assessment AI. Analyze conversations for risk indicators and provide structured JSON responses."},
                 {"role": "user", "content": ai_prompt}
-            ])
+            ]
             
-            # Parse AI response robustly (extract JSON if wrapper text present)
-            raw = response.choices[0].message.content if response.choices else ""
+            raw = ai_service.generate_response(messages)
             ai_result = {}
             try:
                 ai_result = json.loads(raw)
@@ -2089,42 +2087,23 @@ CONTEXT:
     try:
         # Select chat model: allow per-request override, fallback to env CHAT_MODEL
         req_model = (data.get("model") or "").strip()
-        chat_model = req_model or CHAT_MODEL
-        # Use a conservative decoding config for accuracy and stability
-        app.logger.info(f"Calling Ollama chat with model: {chat_model}")
+        # Use Hugging Face AI service instead of Ollama
+        app.logger.info(f"Calling Hugging Face AI service")
         
-        # Use retry wrapper (now fixed to remove timeout parameter)
-        app.logger.info(f"Sending messages to Ollama: {len(messages)} messages")
-        reply = _retry_ollama_call(
-            openai_client.chat.completions.create,
-            model=chat_model,
-            messages=messages,
-            options={"temperature": 0.2, "top_p": 0.9}
-        )
-        answer = reply.get("message", {}).get("content", "") or ""
-        app.logger.info(f"Ollama response received: {answer[:100]}...")
+        # Generate response using Hugging Face model
+        answer = ai_service.generate_response(messages)
+        app.logger.info(f"Hugging Face response received: {answer[:100]}...")
         
         # Check if answer is empty or too short
         if not answer or len(answer.strip()) < 10:
             app.logger.warning(f"Answer too short or empty: '{answer}'")
-            # Try a simpler prompt with just the query
-            simple_messages = [
-                {"role": "system", "content": f"You are AIMHSA, a supportive mental-health companion for Rwanda. Respond warmly and helpfully in {translation_service.get_language_name(target_language)}."},
-                {"role": "user", "content": query}
-            ]
-            app.logger.info("Trying simpler prompt...")
-            reply = _retry_ollama_call(ollama.chat, model=chat_model, messages=simple_messages, options={"temperature": 0.2, "top_p": 0.9})
-            answer = reply.get("message", {}).get("content", "") or ""
-            app.logger.info(f"Simple prompt response: {answer[:100]}...")
-            
-            # If still empty, provide a helpful default response
-            if not answer or len(answer.strip()) < 10:
-                if target_language == 'en':
-                    answer = f"Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
-                elif target_language == 'fr':
-                    answer = f"Bonjour! Je suis AIMHSA, votre compagnon de santé mentale pour le Rwanda. Comment puis-je vous aider aujourd'hui? Pour une aide immédiate, contactez la ligne d'assistance en santé mentale au 105."
-                elif target_language == 'rw':
-                    answer = f"Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'u Rwanda. Nakora iki ngo ngufashe uyu munsi? Niba ukeneye ubufasha bwihuse, hamagara Ligne d'assistance en santé mentale ku 105."
+            # Provide a helpful default response
+            if target_language == 'en':
+                answer = f"Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
+            elif target_language == 'fr':
+                answer = f"Bonjour! Je suis AIMHSA, votre compagnon de santé mentale pour le Rwanda. Comment puis-je vous aider aujourd'hui? Pour une aide immédiate, contactez la ligne d'assistance en santé mentale au 105."
+            elif target_language == 'rw':
+                answer = f"Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'u Rwanda. Nakora iki ngo ngufashe uyu munsi? Niba ukeneye ubufasha bwihuse, hamagara Ligne d'assistance en santé mentale ku 105."
         if not isinstance(answer, str) or not answer.strip():
             app.logger.warning("Empty answer received, using language-specific fallback")
             
