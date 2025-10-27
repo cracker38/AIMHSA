@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import json
 import numpy as np
+import os
 # Replace ollama import with OpenAI client
 from openai import OpenAI
-import os
 from translation_service import translation_service
 
 app = Flask(__name__)
@@ -107,6 +107,26 @@ def ask():
 @app.route('/healthz', methods=['GET'])
 def health():
     return jsonify({"ok": True})
+
+# Serve frontend files
+@app.route('/')
+def index():
+    return send_file('chatbot/index.html')
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Serve static files from chatbot directory"""
+    return send_from_directory('chatbot', filename)
+
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    """Serve JavaScript files"""
+    return send_from_directory('chatbot/js', filename)
+
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    """Serve CSS files"""
+    return send_from_directory('chatbot', filename)
 
 if __name__ == '__main__':
     print("Starting Working AIMHSA API...")
