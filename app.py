@@ -1329,22 +1329,28 @@ def retrieve(query: str, k: int = 4, lambda_param: float = 0.6):
             doc_dim = int(chunk_embeddings.shape[1])
             q_dim = int(q_emb.shape[1]) if q_emb.ndim == 2 else int(q_emb.reshape(1, -1).shape[1])
             if q_dim != doc_dim:
+                # Try re-embedding with configured EMBED_MODEL to avoid provider mismatch
                 app.logger.warning(
-                    f"Query emb dim {q_dim} != chunk dim {doc_dim}. Using nomic-embed-text to match."
+                    f"Query emb dim {q_dim} != chunk dim {doc_dim}. Re-embedding with EMBED_MODEL={EMBED_MODEL}."
                 )
-                # Always use nomic-embed-text to match the stored chunks
                 try:
-                    response = openai_client.embeddings.create(model="nomic-embed-text", input=query)
+                    response = openai_client.embeddings.create(model=EMBED_MODEL, input=query)
                     q_emb2 = np.array([response.data[0].embedding], dtype=np.float32)
                     q_dim2 = int(q_emb2.shape[1])
                     if q_dim2 == doc_dim:
                         q_emb = q_emb2
-                        app.logger.info(f"Successfully re-embedded with nomic-embed-text, shape: {q_emb.shape}")
+                        app.logger.info(
+                            f"Successfully re-embedded with EMBED_MODEL ({EMBED_MODEL}), shape: {q_emb.shape}"
+                        )
                     else:
-                        app.logger.error(f"Even nomic-embed-text dimension {q_dim2} doesn't match chunk dim {doc_dim}")
+                        app.logger.error(
+                            f"Re-embedded dim {q_dim2} still doesn't match chunk dim {doc_dim}."
+                        )
                         return []
                 except Exception as re_err:
-                    app.logger.error(f"Re-embedding with nomic-embed-text failed: {re_err}")
+                    app.logger.error(
+                        f"Re-embedding with EMBED_MODEL ({EMBED_MODEL}) failed: {re_err}"
+                    )
                     return []
     except Exception as dim_err:
         app.logger.error(f"Dimension harmonization error: {dim_err}")
