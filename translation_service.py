@@ -3,10 +3,19 @@ Professional Multilingual Chatbot Translation Service
 Supports English, French, Kiswahili, and Kinyarwanda
 
 Features:
+- Pattern-based detection: Detects Kinyarwanda, French, Kiswahili, and English using keyword patterns
+- Falls back to langdetect if patterns are unclear
+- Google Translator integration: Uses GoogleTranslator from deep_translator for accurate translations
+- Language-specific normalization: Post-processes translations for Kinyarwanda, French, and Kiswahili to remove artifacts and ensure natural output
+- Automatic workflow: Detects user language → translates query to English for RAG → translates response back to user's language
+- This keeps the AI reasoning in English while the user sees responses in their preferred language
+
+Integration:
 - Automatic language detection from user input
-- Exclusively responds in the detected language
+- Exclusively responds in the detected language (pure language, no mixed languages)
 - Uses GoogleTranslator from deep_translator for accurate translation
 - Maintains natural tone, accuracy, and clarity in all supported languages
+- Post-processing normalization removes mixed-language artifacts
 """
 from typing import Dict, List, Optional, Tuple
 from langdetect import detect, detect_langs, DetectorFactory
