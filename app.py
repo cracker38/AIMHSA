@@ -1800,34 +1800,35 @@ def determine_target_language(current_query: str, server_history: List[Dict], ma
     """
     app.logger.info(f"Determining language for query: '{current_query[:50]}...'")
     
-    # First priority: Current query language detection
+    # First priority: Current query language detection using translation service
+    # The translation service uses comprehensive pattern-based detection
     try:
         current_lang = translation_service.detect_language(current_query or "")
-        app.logger.info(f"Detected current query language: {current_lang}")
+        app.logger.info(f"Translation service detected current query language: {current_lang}")
         
-        # If current query language is detected with high confidence, use it immediately
-        if current_lang and current_lang != 'en':
-            app.logger.info(f"Using non-English current query language: {current_lang}")
+        # The translation service's detect_language already uses pattern matching internally
+        # so we can trust its detection. If it returns a non-English language, use it.
+        if current_lang and current_lang in translation_service.supported_languages:
+            app.logger.info(f"Using detected language: {current_lang}")
             return current_lang
-        elif current_lang == 'en':
-            # Check if this might be a false positive for English
-            # Look for non-English patterns in the query
-            non_english_indicators = [
-                'muraho', 'murakoze', 'ndabishimye',  # Kinyarwanda
-                'bonjour', 'merci', 'je suis',  # French  
-                'hujambo', 'asante', 'nina'  # Kiswahili
-            ]
-            
-            query_lower = current_query.lower()
-            for indicator in non_english_indicators:
-                if indicator in query_lower:
-                    # Re-detect with more aggressive pattern matching
-                    pattern_lang = translation_service._detect_by_patterns(current_query)
-                    if pattern_lang and pattern_lang != 'en':
-                        app.logger.info(f"Pattern override detected: {pattern_lang}")
-                        return pattern_lang
+        
+        # Fallback: If detection returns 'en' but we suspect it might be wrong,
+        # use pattern-based detection as a second check
+        if current_lang == 'en':
+            # Check for strong non-English patterns using the translation service's pattern detector
+            pattern_lang = translation_service._detect_by_patterns(current_query)
+            if pattern_lang and pattern_lang != 'en' and pattern_lang in translation_service.supported_languages:
+                app.logger.info(f"Pattern-based override detected: {pattern_lang}")
+                return pattern_lang
     except Exception as e:
         app.logger.warning(f"Language detection error for current query: {e}")
+        # Try direct pattern detection as fallback
+        try:
+            pattern_lang = translation_service._detect_by_patterns(current_query)
+            if pattern_lang and pattern_lang in translation_service.supported_languages:
+                return pattern_lang
+        except:
+            pass
         current_lang = "en"
 
     # Second priority: Check recent conversation history for consistency
@@ -1843,16 +1844,18 @@ def determine_target_language(current_query: str, server_history: List[Dict], ma
         if len(recent_user_texts) >= max_history_samples:
             break
 
-    # Analyze recent messages for language consistency
+    # Analyze recent messages for language consistency using translation service
     if recent_user_texts:
         language_votes: Dict[str, int] = {}
         
         for text in recent_user_texts:
             try:
+                # Use translation service's comprehensive detection
                 detected_lang = translation_service.detect_language(text)
-                if detected_lang:
+                if detected_lang and detected_lang in translation_service.supported_languages:
                     language_votes[detected_lang] = language_votes.get(detected_lang, 0) + 1
-            except Exception:
+            except Exception as e:
+                app.logger.debug(f"Error detecting language in history: {e}")
                 continue
         
         # Find the most common language in recent history
@@ -2020,11 +2023,15 @@ def ask():
                 messages.append({"role": role, "content": content})
 
     # Determine stable target language from this query and recent history
+    # Uses translation_service.detect_language() with comprehensive pattern-based detection
+    # This ensures accurate language detection for Kinyarwanda, French, Kiswahili, and English
     target_language = determine_target_language(query, server_history)
     app.logger.info(f"Target language determined: {target_language}")
     
     # retrieval-based context
     # Retrieve more context for better grounded answers
+    # Note: Query translation to English for RAG is handled automatically via language-specific prompts
+    # The AI model generates responses directly in the target language, maintaining pure language responses
     top = retrieve(query, k=6)
     context = build_context(top)
 
@@ -2135,7 +2142,22 @@ CONTEXT:
         
         # Generate response using Hugging Face model
         answer = ai_service.generate_response(messages)
-        app.logger.info(f"Hugging Face response received: {answer[:100]}...")
+        app.logger.info(f"AI response received: {answer[:100]}...")
+        
+        # Post-process answer using translation service to ensure pure language response
+        # This normalizes the response and removes any mixed-language artifacts
+        if answer and target_language != 'en':
+            try:
+                # Normalize the response based on target language to remove mixed languages
+                if target_language == 'rw':
+                    answer = translation_service.normalize_kinyarwanda(answer)
+                elif target_language == 'fr':
+                    answer = translation_service.normalize_french(answer)
+                elif target_language == 'sw':
+                    answer = translation_service.normalize_kiswahili(answer)
+                app.logger.info(f"Normalized response for {target_language}: {answer[:100]}...")
+            except Exception as e:
+                app.logger.warning(f"Normalization failed, using original response: {e}")
         
         # Check if answer is empty or too short
         if not answer or len(answer.strip()) < 10:
