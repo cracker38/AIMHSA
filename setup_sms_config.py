@@ -36,11 +36,11 @@ STORAGE_DIR=storage
 DATA_DIR=data
 
 # AI Configuration
-CHAT_MODEL=llama3.2:3b
-EMBED_MODEL=nomic-embed-text
-SENT_EMBED_MODEL=nomic-embed-text
-OLLAMA_BASE_URL=http://localhost:11434/v1
-OLLAMA_API_KEY=ollama
+CHAT_MODEL=meta-llama/llama-3.1-8b-instruct
+EMBED_MODEL=openai/text-embedding-3-small
+SENT_EMBED_MODEL=openai/text-embedding-3-small
+OLLAMA_BASE_URL=https://openrouter.ai/api/v1
+OLLAMA_API_KEY=
 
 # Email Configuration (UPDATE WITH YOUR VALUES)
 SMTP_SERVER=smtp.gmail.com

@@ -10,9 +10,9 @@ load_dotenv()
 
 DATA_DIR = Path("data")
 EMBED_FILE = Path("storage/embeddings.json")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "openai/text-embedding-3-small")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 # Initialize OpenAI client for Ollama
 openai_client = OpenAI(

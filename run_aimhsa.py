@@ -122,11 +122,11 @@ load_dotenv()
 
 # Configuration
 EMBED_FILE = "storage/embeddings.json"
-CHAT_MODEL = os.getenv("CHAT_MODEL", "llama3.2")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "nomic-embed-text")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct")
+EMBED_MODEL = os.getenv("EMBED_MODEL", "openai/text-embedding-3-small")
 DB_FILE = "storage/conversations.db"
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 # SMS Configuration
 HDEV_SMS_API_ID = os.getenv('HDEV_SMS_API_ID', '')

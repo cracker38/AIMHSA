@@ -20,8 +20,8 @@ class HuggingFaceAIService:
             self.logger.info("Initializing OpenAI-compatible client...")
             
             # Get configuration from environment
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-            api_key = os.getenv("OLLAMA_API_KEY", "ollama")
+            base_url = os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1")
+            api_key = os.getenv("OLLAMA_API_KEY", "")
             
             self.openai_client = OpenAI(
                 base_url=base_url,
@@ -45,8 +45,9 @@ class HuggingFaceAIService:
                 return self._get_fallback_response()
             
             # Call OpenAI-compatible API
+            chat_model = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
             response = self.openai_client.chat.completions.create(
-                model='llama3.2:3b',
+                model=chat_model,
                 messages=messages,
                 temperature=0.7,
                 top_p=0.9,

@@ -77,9 +77,9 @@ SMTP_PASSWORD={password}
 FROM_EMAIL={from_email}
 
 # Chat Model Configuration
-CHAT_MODEL=llama3.2:3b
-EMBED_MODEL=nomic-embed-text
-SENT_EMBED_MODEL=nomic-embed-text
+CHAT_MODEL=meta-llama/llama-3.1-8b-instruct
+EMBED_MODEL=openai/text-embedding-3-small
+SENT_EMBED_MODEL=openai/text-embedding-3-small
 """
     
     save_env_file(env_content, "Gmail")
@@ -111,9 +111,9 @@ SMTP_PASSWORD={password}
 FROM_EMAIL={from_email}
 
 # Chat Model Configuration
-CHAT_MODEL=llama3.2:3b
-EMBED_MODEL=nomic-embed-text
-SENT_EMBED_MODEL=nomic-embed-text
+CHAT_MODEL=meta-llama/llama-3.1-8b-instruct
+EMBED_MODEL=openai/text-embedding-3-small
+SENT_EMBED_MODEL=openai/text-embedding-3-small
 """
     
     save_env_file(env_content, "Outlook")
@@ -151,9 +151,9 @@ SMTP_PASSWORD={password}
 FROM_EMAIL={from_email}
 
 # Chat Model Configuration
-CHAT_MODEL=llama3.2:3b
-EMBED_MODEL=nomic-embed-text
-SENT_EMBED_MODEL=nomic-embed-text
+CHAT_MODEL=meta-llama/llama-3.1-8b-instruct
+EMBED_MODEL=openai/text-embedding-3-small
+SENT_EMBED_MODEL=openai/text-embedding-3-small
 """
     
     save_env_file(env_content, "Yahoo")
@@ -194,9 +194,9 @@ SMTP_PASSWORD={password}
 FROM_EMAIL={from_email}
 
 # Chat Model Configuration
-CHAT_MODEL=llama3.2:3b
-EMBED_MODEL=nomic-embed-text
-SENT_EMBED_MODEL=nomic-embed-text
+CHAT_MODEL=meta-llama/llama-3.1-8b-instruct
+EMBED_MODEL=openai/text-embedding-3-small
+SENT_EMBED_MODEL=openai/text-embedding-3-small
 """
     
     save_env_file(env_content, "Custom SMTP")
