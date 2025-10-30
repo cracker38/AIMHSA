@@ -12,8 +12,8 @@ def create_env_file():
     print("🔧 Setting up AIMHSA SMS configuration...")
     
     # Your SMS credentials
-    api_id = "HDEV-23fb1b59-aec0-4aef-a351-bfc1c3aa3c52-ID"
-    api_key = "HDEV-6e36c286-19bb-4b45-838e-8b5cd0240857-KEY"
+    api_id = "HDEV-87743753-35bb-45da-8103-37d4bb6bfeb6-ID"
+    api_key = "HDEV-d07e9d3e-6d1a-4863-84e8-2d43f0a0b64a-KEY"
     
     env_content = f"""# AIMHSA Environment Configuration
 # Copy this file and update with your actual credentials
@@ -92,7 +92,7 @@ def verify_sms_setup():
 
 def main():
     print("="*60)
-    print("🧠 AIMHSA SMS Configuration Setup")
+    print("AIMHSA SMS Configuration Setup")
     print("="*60)
     
     # Create .env file

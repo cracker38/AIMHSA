@@ -198,6 +198,10 @@ AIMHSA Team"""
             
             contact_section = "\n".join(contact_info) if contact_info else "Contact information will be provided upon confirmation."
             
+            # Determine frontend URL for links
+            import os as _os
+            _frontend = (_os.getenv('FRONTEND_URL') or '').rstrip('/')
+
             message = f"""AIMHSA Professional Alert
 
 New {risk_level.upper()} risk booking assigned to you.
@@ -214,7 +218,7 @@ REASON FOR BOOKING:
 {booking_reason[:200]}{'...' if len(booking_reason) > 200 else ''}
 
 Please login to your dashboard to view full details and accept/decline:
-https://fezaflora-aimhsa.hf.space/login
+{(_frontend + '/login') if _frontend else 'Please open the AIMHSA dashboard and sign in'}
 
 AIMHSA System"""
             

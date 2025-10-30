@@ -6,16 +6,9 @@
         if (window.AIMHSA && window.AIMHSA.Config) {
             return window.AIMHSA.Config.getApiBaseUrl();
         }
-        
-        // Fallback to auto-detection
-        const loc = window.location;
-        if (loc.port === '8000') {
-            return `${loc.protocol}//${loc.hostname}:7860`;
-        } else if (loc.port === '7860' || loc.port === '') {
-            return loc.origin;
-        } else {
-            return 'https://fezaflora-aimhsa.hf.space';
-        }
+		
+		// Fallback to current origin
+		return window.location.origin;
     };
     
     const API_BASE_URL = getAPIBaseUrl();

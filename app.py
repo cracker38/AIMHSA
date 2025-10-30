@@ -1382,11 +1382,11 @@ def create_automated_booking(conv_id: str, risk_assessment: Dict, user_account: 
     if user_account:
         user_data = get_user_data(user_account)
     
-    # Verify SMS capability before creating booking
+    # Verify SMS capability (but don't block booking creation)
     sms_service = get_sms_service()
     if not sms_service:
-        app.logger.error("SMS service not initialized - cannot create booking with SMS notifications")
-        return None
+        app.logger.warning("⚠️ SMS service not initialized - booking will be created without SMS notifications")
+        # Continue to create booking even without SMS
     
     # Check if we can send SMS to both parties
     can_send_user_sms = user_data and user_data.get('telephone')
@@ -1397,11 +1397,14 @@ def create_automated_booking(conv_id: str, risk_assessment: Dict, user_account: 
     app.logger.info(f"   Professional SMS: {'✅ Ready' if can_send_prof_sms else '❌ No phone number'}")
     
     if not can_send_user_sms and not can_send_prof_sms:
-        app.logger.warning("⚠️ Neither user nor professional has phone number - booking created without SMS")
+        app.logger.warning("⚠️ Neither user nor professional has phone number - booking will be created without SMS")
     elif not can_send_user_sms:
         app.logger.warning("⚠️ User has no phone number - only professional will receive SMS")
     elif not can_send_prof_sms:
         app.logger.warning("⚠️ Professional has no phone number - only user will receive SMS")
+    
+    # Create the booking regardless of SMS capability
+    app.logger.info(f"📋 Creating booking for professional: {professional['username']} (ID: {professional['id']})")
     
     # Generate booking ID
     booking_id = str(uuid.uuid4())
@@ -1460,87 +1463,88 @@ def create_automated_booking(conv_id: str, risk_assessment: Dict, user_account: 
         
         conn.commit()
         
-        # Prepare booking data for SMS
-        booking_data = {
-            'booking_id': booking_id,
-            'scheduled_time': scheduled_datetime,
-            'session_type': session_type,
-            'risk_level': risk_assessment['risk_level']
-        }
-        
-        # Send SMS notifications to both user and professional
-        sms_service = get_sms_service()
-        sms_results = {'user_sms': None, 'professional_sms': None}
-        
-        if sms_service:
-            app.logger.info(f"Starting SMS notifications for booking {booking_id}")
-            
-            # Send SMS to user if we have their data and phone number
-            if user_data and user_data.get('telephone'):
-                try:
-                    app.logger.info(f"Sending SMS to user {user_account} at {user_data.get('telephone')}")
-                    user_sms_result = sms_service.send_booking_notification(
-                        user_data, professional, booking_data
-                    )
-                    sms_results['user_sms'] = user_sms_result
-                    
-                    if user_sms_result.get('success'):
-                        app.logger.info(f"✅ SMS sent successfully to user {user_account}: {user_sms_result.get('phone')}")
-                    else:
-                        app.logger.warning(f"❌ Failed to send SMS to user {user_account}: {user_sms_result.get('error', 'Unknown error')}")
-                except Exception as e:
-                    app.logger.error(f"❌ Error sending SMS to user: {str(e)}")
-                    sms_results['user_sms'] = {'success': False, 'error': str(e)}
-            else:
-                app.logger.warning(f"⚠️ Cannot send SMS to user {user_account}: No phone number or user data")
-                if not user_data:
-                    app.logger.warning(f"User data not found for {user_account}")
-                elif not user_data.get('telephone'):
-                    app.logger.warning(f"User {user_account} has no phone number: {user_data}")
-            
-            # Send SMS to professional if they have a phone number
-            if professional.get('phone'):
-                try:
-                    app.logger.info(f"Sending SMS to professional {professional['username']} at {professional.get('phone')}")
-                    prof_sms_result = sms_service.send_professional_notification(
-                        professional, user_data or {}, booking_data
-                    )
-                    sms_results['professional_sms'] = prof_sms_result
-                    
-                    if prof_sms_result.get('success'):
-                        app.logger.info(f"✅ SMS sent successfully to professional {professional['username']}: {prof_sms_result.get('phone')}")
-                    else:
-                        app.logger.warning(f"❌ Failed to send SMS to professional: {prof_sms_result.get('error', 'Unknown error')}")
-                except Exception as e:
-                    app.logger.error(f"❌ Error sending SMS to professional: {str(e)}")
-                    sms_results['professional_sms'] = {'success': False, 'error': str(e)}
-            else:
-                app.logger.warning(f"⚠️ Cannot send SMS to professional {professional['username']}: No phone number")
-                app.logger.warning(f"Professional data: {professional}")
-            
-            # Log summary of SMS sending results
-            user_success = sms_results['user_sms'] and sms_results['user_sms'].get('success', False)
-            prof_success = sms_results['professional_sms'] and sms_results['professional_sms'].get('success', False)
-            
-            app.logger.info(f"📱 SMS Summary for booking {booking_id}:")
-            app.logger.info(f"   User SMS: {'✅ Sent' if user_success else '❌ Failed'}")
-            app.logger.info(f"   Professional SMS: {'✅ Sent' if prof_success else '❌ Failed'}")
-            
-        else:
-            app.logger.error("❌ SMS service not initialized - no SMS notifications sent")
-            app.logger.error("Please check SMS configuration and restart the application")
-        
-        return {
-            'booking_id': booking_id,
-            'professional_name': f"{professional['first_name']} {professional['last_name']}",
-            'specialization': professional['specialization'],
-            'scheduled_time': scheduled_datetime,
-            'session_type': session_type,
-            'risk_level': risk_assessment['risk_level']
-        }
-        
     finally:
         conn.close()
+    
+    # Prepare booking data for SMS
+    booking_data = {
+        'booking_id': booking_id,
+        'scheduled_time': scheduled_datetime,
+        'session_type': session_type,
+        'risk_level': risk_assessment['risk_level'],
+        'conversation_summary': conversation_summary
+    }
+    
+    # Send SMS notifications to both user and professional (AFTER booking is created)
+    sms_service = get_sms_service()
+    sms_results = {'user_sms': None, 'professional_sms': None}
+    
+    if sms_service:
+        app.logger.info(f"Starting SMS notifications for booking {booking_id}")
+        
+        # Send SMS to professional first (most important)
+        if professional.get('phone'):
+            try:
+                app.logger.info(f"📱 Sending SMS to professional {professional['username']} at {professional.get('phone')}")
+                prof_sms_result = sms_service.send_professional_notification(
+                    professional, user_data or {}, booking_data
+                )
+                sms_results['professional_sms'] = prof_sms_result
+                
+                if prof_sms_result.get('success'):
+                    app.logger.info(f"✅ SMS sent successfully to professional {professional['username']}: {prof_sms_result.get('phone')}")
+                else:
+                    app.logger.warning(f"❌ Failed to send SMS to professional: {prof_sms_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                app.logger.error(f"❌ Error sending SMS to professional: {str(e)}")
+                sms_results['professional_sms'] = {'success': False, 'error': str(e)}
+        else:
+            app.logger.warning(f"⚠️ Cannot send SMS to professional {professional['username']}: No phone number")
+            app.logger.warning(f"Professional data: {professional}")
+        
+        # Send SMS to user if we have their data and phone number
+        if user_data and user_data.get('telephone'):
+            try:
+                app.logger.info(f"📱 Sending SMS to user {user_account} at {user_data.get('telephone')}")
+                user_sms_result = sms_service.send_booking_notification(
+                    user_data, professional, booking_data
+                )
+                sms_results['user_sms'] = user_sms_result
+                
+                if user_sms_result.get('success'):
+                    app.logger.info(f"✅ SMS sent successfully to user {user_account}: {user_sms_result.get('phone')}")
+                else:
+                    app.logger.warning(f"❌ Failed to send SMS to user {user_account}: {user_sms_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                app.logger.error(f"❌ Error sending SMS to user: {str(e)}")
+                sms_results['user_sms'] = {'success': False, 'error': str(e)}
+        else:
+            app.logger.warning(f"⚠️ Cannot send SMS to user {user_account}: No phone number or user data")
+            if not user_data:
+                app.logger.warning(f"User data not found for {user_account}")
+            elif not user_data.get('telephone'):
+                app.logger.warning(f"User {user_account} has no phone number: {user_data}")
+        
+        # Log summary of SMS sending results
+        user_success = sms_results['user_sms'] and sms_results['user_sms'].get('success', False)
+        prof_success = sms_results['professional_sms'] and sms_results['professional_sms'].get('success', False)
+        
+        app.logger.info(f"📱 SMS Summary for booking {booking_id}:")
+        app.logger.info(f"   Professional SMS: {'✅ Sent' if prof_success else '❌ Failed'}")
+        app.logger.info(f"   User SMS: {'✅ Sent' if user_success else '❌ Failed'}")
+        
+    else:
+        app.logger.warning("⚠️ SMS service not initialized - no SMS notifications sent")
+        app.logger.warning("Please check SMS configuration and restart the application")
+    
+    return {
+        'booking_id': booking_id,
+        'professional_name': f"{professional['first_name']} {professional['last_name']}",
+        'specialization': professional['specialization'],
+        'scheduled_time': scheduled_datetime,
+        'session_type': session_type,
+        'risk_level': risk_assessment['risk_level']
+    }
 
 def get_user_data(username: str) -> Optional[Dict]:
     """Get user data by username for SMS notifications"""

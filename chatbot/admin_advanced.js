@@ -16,7 +16,10 @@
         let apiRoot;
         try {
             const loc = window.location;
-            if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
+            if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+                // Local development - always use localhost:7860
+                apiRoot = 'http://localhost:7860';
+            } else if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
                 // Hugging Face Spaces - use HTTPS
                 apiRoot = `${loc.protocol}//${loc.hostname}`;
             } else if (loc.port === '8000') {
@@ -26,11 +29,11 @@
                 // Local development or production without port
                 apiRoot = loc.origin;
             } else {
-                // Default fallback
-                apiRoot = 'https://fezaflora-aimhsa.hf.space';
+                // Default fallback for local development
+                apiRoot = 'http://localhost:7860';
             }
         } catch (_) {
-            apiRoot = 'https://fezaflora-aimhsa.hf.space';
+            apiRoot = 'http://localhost:7860';
         }
         console.log('🌐 Admin Dashboard API Root:', apiRoot);
         return apiRoot;
@@ -1547,92 +1550,83 @@
             })
             .then(data => {
                 console.log(' Professionals data received:', data);
-        tbody.empty();
+                
+                // Clear existing DataTable if it exists
+                if (dataTables.professionals) {
+                    try {
+                        dataTables.professionals.clear();
+                    } catch (e) {
+                        console.warn('Could not clear DataTable:', e);
+                    }
+                } else {
+                    // If DataTable doesn't exist yet, just clear the tbody
+                    tbody.empty();
+                }
 
                 if (data.professionals && data.professionals.length > 0) {
                     // Update statistics
                     updateProfessionalStats(data.professionals);
                     
-                    data.professionals.forEach(prof => {
+                    // Prepare rows using DataTables API
+                    const rows = data.professionals.map(prof => {
                         const fullName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim();
                         const statusClass = prof.is_active ? 'success' : 'secondary';
                         const statusText = prof.is_active ? 'Active' : 'Inactive';
                         
-            const consultationFee = prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A';
-            const district = prof.district || 'N/A';
+                        const consultationFee = prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A';
+                        const district = prof.district || 'N/A';
                         
-            const row = `
-                <tr class="professional-row" data-id="${prof.id}">
-                    <td><strong>${prof.id}</strong></td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <div class="mr-2">
-                                <i class="fas fa-user-circle text-primary"></i>
-                            </div>
-                            <div>
-                                <strong>${fullName || 'N/A'}</strong>
-                                <br><small class="text-muted">@${prof.username}</small>
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        <span class="badge badge-info">${prof.specialization || 'N/A'}</span>
-                    </td>
-                    <td>
-                        <a href="mailto:${prof.email}" class="text-decoration-none">
-                            <i class="fas fa-envelope mr-1"></i>${prof.email || 'N/A'}
-                        </a>
-                    </td>
-                    <td>
-                        ${prof.phone ? `<a href="tel:${prof.phone}" class="text-decoration-none"><i class="fas fa-phone mr-1"></i>${prof.phone}</a>` : 'N/A'}
-                    </td>
-                    <td>
-                        <span class="badge badge-secondary">
-                            <i class="fas fa-calendar-alt mr-1"></i>${prof.experience_years || 0} years
-                        </span>
-                    </td>
-                    <td>
-                        <span class="text-success font-weight-bold">${consultationFee}</span>
-                    </td>
-                    <td>
-                        <i class="fas fa-map-marker-alt text-danger mr-1"></i>${district}
-                    </td>
-                    <td>
-                        <span class="badge badge-warning" id="activeBookings-${prof.id}">
-                            <i class="fas fa-spinner fa-spin mr-1"></i>Loading...
-                        </span>
-                    </td>
-                    <td>
-                        <span class="badge badge-${statusClass} badge-pill">
-                            <i class="fas fa-${prof.is_active ? 'check-circle' : 'times-circle'} mr-1"></i>${statusText}
-                        </span>
-                    </td>
-                    <td>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-sm btn-outline-primary" onclick="editProfessional(${prof.id})" title="Edit Professional">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                            <button class="btn btn-sm btn-outline-${prof.is_active ? 'warning' : 'success'}" 
-                                            onclick="toggleProfessionalStatus(${prof.id})" 
-                                    title="${prof.is_active ? 'Deactivate' : 'Activate'} Professional">
-                                        <i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i>
-                                    </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProfessional(${prof.id})" title="Delete Professional">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-            tbody.append(row);
-        });
+                        return [
+                            prof.id,
+                            `<div class="d-flex align-items-center">
+                                <div class="mr-2"><i class="fas fa-user-circle text-primary"></i></div>
+                                <div><strong>${fullName || 'N/A'}</strong><br><small class="text-muted">@${prof.username}</small></div>
+                            </div>`,
+                            `<span class="badge badge-info">${prof.specialization || 'N/A'}</span>`,
+                            `<a href="mailto:${prof.email}" class="text-decoration-none"><i class="fas fa-envelope mr-1"></i>${prof.email || 'N/A'}</a>`,
+                            prof.phone ? `<a href="tel:${prof.phone}" class="text-decoration-none"><i class="fas fa-phone mr-1"></i>${prof.phone}</a>` : 'N/A',
+                            `<span class="badge badge-secondary"><i class="fas fa-calendar-alt mr-1"></i>${prof.experience_years || 0} years</span>`,
+                            `<span class="text-success font-weight-bold">${consultationFee}</span>`,
+                            `<i class="fas fa-map-marker-alt text-danger mr-1"></i>${district}`,
+                            `<span class="badge badge-warning" id="activeBookings-${prof.id}"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</span>`,
+                            `<span class="badge badge-${statusClass} badge-pill"><i class="fas fa-${prof.is_active ? 'check-circle' : 'times-circle'} mr-1"></i>${statusText}</span>`,
+                            `<div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="editProfessional(${prof.id})" title="Edit"><i class="fas fa-edit"></i></button>
+                                <button class="btn btn-sm btn-outline-${prof.is_active ? 'warning' : 'success'}" onclick="toggleProfessionalStatus(${prof.id})" title="${prof.is_active ? 'Deactivate' : 'Activate'}"><i class="fas fa-${prof.is_active ? 'pause' : 'play'}"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteProfessional(${prof.id})" title="Delete"><i class="fas fa-trash"></i></button>
+                            </div>`
+                        ];
+                    });
+                    
+                    // Add rows using DataTables API
+                    if (dataTables.professionals) {
+                        dataTables.professionals.rows.add(rows).draw();
+                    } else {
+                        // Fallback: append to tbody if DataTable not initialized
+                        rows.forEach((rowData, index) => {
+                            const prof = data.professionals[index];
+                            const fullName = `${prof.first_name || ''} ${prof.last_name || ''}`.trim();
+                            const statusClass = prof.is_active ? 'success' : 'secondary';
+                            const statusText = prof.is_active ? 'Active' : 'Inactive';
+                            const consultationFee = prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A';
+                            const district = prof.district || 'N/A';
+                            
+                            const row = `<tr class="professional-row" data-id="${prof.id}">
+                                ${rowData.map(cell => `<td>${cell}</td>`).join('')}
+                            </tr>`;
+                            tbody.append(row);
+                        });
+                    }
+                    
                     console.log(' Professionals loaded successfully');
                 } else {
-                    tbody.html('<tr><td colspan="11" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
+                    if (dataTables.professionals) {
+                        tbody.html('<tr><td colspan="11" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
+                        dataTables.professionals.draw();
+                    } else {
+                        tbody.html('<tr><td colspan="11" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No professionals found</td></tr>');
+                    }
                 }
-
-                // Update DataTable if it exists
-                safeUpdateDataTable(dataTables.professionals, tbody, 'professionalsTable');
                 
                 // Load active bookings count for each professional
                 loadActiveBookingsCount(data.professionals);

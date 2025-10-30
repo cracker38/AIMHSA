@@ -4,20 +4,13 @@
         if (window.AIMHSA && window.AIMHSA.Config) {
             return window.AIMHSA.Config.getApiBaseUrl();
         }
-        
-        // Fallback to intelligent detection
-        try {
-            const loc = window.location;
-            if (loc.port === '8000') {
-                return `${loc.protocol}//${loc.hostname}:7860`;
-            } else if (loc.port === '7860' || loc.port === '') {
-                return loc.origin;
-            } else {
-                return 'https://fezaflora-aimhsa.hf.space';
-            }
-        } catch (_) {
-            return 'https://fezaflora-aimhsa.hf.space';
-        }
+		
+		// Fallback to current origin
+		try {
+			return window.location.origin;
+		} catch (_) {
+			return window.location.origin;
+		}
     };
     
     const API_ROOT = getAPIRoot();

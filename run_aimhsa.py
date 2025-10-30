@@ -1,5 +1,36 @@
 #!/usr/bin/env python3
 """
+AIMHSA Production Launcher (single origin)
+Runs the Flask app serving both API and static frontend on one origin.
+"""
+
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env if present
+load_dotenv()
+
+# Default to production environment for hosted deployments
+os.environ.setdefault('FLASK_ENV', 'production')
+
+from app import app
+from config import current_config
+
+if __name__ == "__main__":
+    host = os.environ.get('HOST', getattr(current_config, 'HOST', '0.0.0.0'))
+    port = int(os.environ.get('PORT', getattr(current_config, 'PORT', 7860)))
+
+    print(f"🚀 Starting AIMHSA on {host}:{port} (production mode)")
+    print(f"🔗 Base URL: http://{host}:{port}")
+
+    app.run(
+        host=host,
+        port=port,
+        debug=False,
+        threaded=True
+    )
+#!/usr/bin/env python3
+"""
 AIMHSA Unified Launcher
 Runs both backend API and frontend on a single port using Flask
 """
