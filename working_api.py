@@ -10,9 +10,9 @@ from translation_service import translation_service
 app = Flask(__name__)
 CORS(app)
 
-# Initialize OpenAI client for Ollama
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama")
+# Initialize OpenAI client for OpenRouter
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 openai_client = OpenAI(
     base_url=OLLAMA_BASE_URL,
@@ -34,8 +34,9 @@ def get_rag_response(query):
     """Get RAG response for a query using OpenAI client"""
     try:
         # Get query embedding using OpenAI client
+        embed_model = os.getenv('EMBED_MODEL', 'openai/text-embedding-3-small')
         response = openai_client.embeddings.create(
-            model='nomic-embed-text',
+            model=embed_model,
             input=query
         )
         q_emb = np.array([response.data[0].embedding], dtype=np.float32)
@@ -62,8 +63,9 @@ def get_rag_response(query):
             {"role": "user", "content": f"Answer the user's question using the CONTEXT below when relevant.\nIf the context is insufficient, be honest and provide safe, general guidance.\nIf the user greets you or asks for general help, respond helpfully without requiring context.\n\nQUESTION:\n{query}\n\nCONTEXT:\n{context}"}
         ]
         
+        chat_model = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
         response = openai_client.chat.completions.create(
-            model='llama3.2:3b', 
+            model=chat_model, 
             messages=messages,
             temperature=0.2,
             top_p=0.9
