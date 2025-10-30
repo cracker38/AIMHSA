@@ -1791,6 +1791,71 @@ Kumbuka: Wewe ni mfumo wa kitaaluma wa msaada wa afya ya akili ulioundwa kutoa m
     
     return prompts.get(target_language, prompts['en'])
 
+def clean_response(response: str, target_language: str) -> str:
+    """
+    Clean and validate response to remove repetitive, nonsensical, or meaningless text.
+    Ensures the response is clean, meaningful, and in the correct language only.
+    """
+    if not response or not isinstance(response, str):
+        return response
+    
+    # Remove excessive repetition (same phrase repeated 3+ times)
+    import re
+    words = response.split()
+    if len(words) > 0:
+        # Check for excessive repetition of phrases
+        # Split into sentences first
+        sentences = re.split(r'[.!?]\s+', response)
+        seen_sentences = set()
+        unique_sentences = []
+        for sentence in sentences:
+            sentence_clean = sentence.strip().lower()
+            # Skip if this sentence appears more than once
+            if sentence_clean not in seen_sentences or len(sentence_clean) > 20:
+                unique_sentences.append(sentence)
+                seen_sentences.add(sentence_clean)
+        
+        # Reconstruct response
+        cleaned = '. '.join(unique_sentences).strip()
+        if cleaned and len(cleaned) > 10:
+            response = cleaned
+    
+    # Remove repetitive patterns (same word/phrase repeated multiple times)
+    # Pattern: "word word word" or "phrase, phrase, phrase"
+    response = re.sub(r'(\b\w+\b\s+)\1{2,}', r'\1', response)  # Remove word repetition
+    
+    # Remove meaningless repetitive phrases (common translation artifacts)
+    meaningless_patterns = [
+        r'kuhusisha kuri wabibi[,\s]*kuhusisha kuri wabibi[,\s]*',
+        r'uwoneka kuri wabwenzi[,\s]*uwoneka kuri wabwenzi[,\s]*',
+        r'kuhusisha kuri wabwenzi[,\s]*kuhusisha kuri wabwenzi[,\s]*',
+        r'(.+?[,\s]*)\1{2,}',  # General pattern: any phrase repeated 3+ times
+    ]
+    
+    for pattern in meaningless_patterns:
+        response = re.sub(pattern, '', response, flags=re.IGNORECASE)
+    
+    # Clean up excessive whitespace
+    response = re.sub(r'\s+', ' ', response).strip()
+    
+    # Remove trailing commas and incomplete sentences
+    response = re.sub(r',\s*$', '.', response)
+    
+    # Validate minimum meaningful length
+    if len(response.strip()) < 15:
+        return None  # Response too short, likely meaningless
+    
+    # Check for excessive repetition ratio
+    words = response.split()
+    if len(words) > 0:
+        unique_words = set(words)
+        repetition_ratio = len(unique_words) / len(words)
+        # If less than 30% of words are unique, response is likely repetitive/nonsensical
+        if repetition_ratio < 0.3 and len(words) > 20:
+            return None
+    
+    return response.strip()
+
 def determine_target_language(current_query: str, server_history: List[Dict], max_history_samples: int = 5) -> str:
     """
     Determine the target reply language with improved accuracy
@@ -2144,7 +2209,17 @@ CONTEXT:
         answer = ai_service.generate_response(messages)
         app.logger.info(f"AI response received: {answer[:100]}...")
         
-        # Post-process answer using translation service to ensure pure language response
+        # Step 1: Clean response to remove repetitive/nonsensical text
+        if answer:
+            cleaned_answer = clean_response(answer, target_language)
+            if cleaned_answer:
+                answer = cleaned_answer
+                app.logger.info(f"Cleaned response: {answer[:100]}...")
+            else:
+                app.logger.warning(f"Response failed validation, using fallback")
+                answer = None  # Will trigger fallback below
+        
+        # Step 2: Post-process answer using translation service to ensure pure language response
         # This normalizes the response and removes any mixed-language artifacts
         if answer and target_language != 'en':
             try:
@@ -2155,11 +2230,14 @@ CONTEXT:
                     answer = translation_service.normalize_french(answer)
                 elif target_language == 'sw':
                     answer = translation_service.normalize_kiswahili(answer)
+                
+                # Re-clean after normalization to catch any new repetition
+                answer = clean_response(answer, target_language) or answer
                 app.logger.info(f"Normalized response for {target_language}: {answer[:100]}...")
             except Exception as e:
                 app.logger.warning(f"Normalization failed, using original response: {e}")
         
-        # Check if answer is empty or too short
+        # Check if answer is empty, too short, or failed validation
         if not answer or len(answer.strip()) < 10:
             app.logger.warning(f"Answer too short or empty: '{answer}'")
             # Provide a helpful default response
