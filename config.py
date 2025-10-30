@@ -6,8 +6,8 @@ Handles environment-specific configuration for hosting
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (override=True ensures .env values override system env)
+load_dotenv(override=True)
 
 class Config:
     """Base configuration class"""
@@ -24,14 +24,14 @@ class Config:
     # Database Configuration
     DB_FILE = os.getenv('DB_FILE', 'storage/conversations.db')
     
-    # Ollama Configuration
-    OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
-    OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY', 'ollama')
+    # Ollama/OpenRouter Configuration
+    OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1')
+    OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY', '')
     
-    # AI Models
-    CHAT_MODEL = os.getenv('CHAT_MODEL', 'llama3.2:3b')
-    EMBED_MODEL = os.getenv('EMBED_MODEL', 'nomic-embed-text')
-    SENT_EMBED_MODEL = os.getenv('SENT_EMBED_MODEL', 'nomic-embed-text')
+    # AI Models (OpenRouter defaults)
+    CHAT_MODEL = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
+    EMBED_MODEL = os.getenv('EMBED_MODEL', 'openai/text-embedding-3-small')
+    SENT_EMBED_MODEL = os.getenv('SENT_EMBED_MODEL', 'openai/text-embedding-3-small')
     
     # Email Configuration
     SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
