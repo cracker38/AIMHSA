@@ -1,21 +1,14 @@
 (() => {
-    // Auto-detect API base URL based on environment
+    // Auto-detect API base URL; prefer config, else current origin
     let API_BASE_URL;
     try {
-        const loc = window.location;
-        if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
-            // Hugging Face Spaces - use HTTPS
-            API_BASE_URL = `${loc.protocol}//${loc.hostname}`;
-        } else if (loc.port === '7860' || loc.port === '') {
-            // Local development or production without port
-            API_BASE_URL = loc.origin;
+        if (window.AIMHSA && window.AIMHSA.Config) {
+            API_BASE_URL = window.AIMHSA.Config.getApiBaseUrl();
         } else {
-            // Local development with specific port
-            API_BASE_URL = `${loc.protocol}//${loc.hostname}:7860`;
+            API_BASE_URL = window.location.origin;
         }
     } catch (_) {
-        // Fallback for any errors
-        API_BASE_URL = 'https://fezaflora-aimhsa.hf.space';
+        API_BASE_URL = window.location.origin;
     }
     
     console.log('🌐 API Base URL:', API_BASE_URL);

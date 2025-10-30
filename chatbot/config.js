@@ -10,7 +10,7 @@
     const DEFAULT_CONFIG = {
         // API Configuration
         api: {
-            baseUrl: 'https://fezaflora-aimhsa.hf.space',
+            baseUrl: window.location.origin,
             timeout: 10000,
             retryAttempts: 3,
             retryDelay: 1000
@@ -49,21 +49,9 @@
 
     // Environment-specific configurations
     const ENVIRONMENT_CONFIGS = {
-        development: {
-            api: {
-                baseUrl: 'https://fezaflora-aimhsa.hf.space'
-            }
-        },
-        production: {
-            api: {
-                baseUrl: 'https://fezaflora-aimhsa.hf.space'
-            }
-        },
-        staging: {
-            api: {
-                baseUrl: 'https://fezaflora-aimhsa.hf.space'
-            }
-        }
+        development: { api: { baseUrl: window.location.origin } },
+        production:  { api: { baseUrl: window.location.origin } },
+        staging:     { api: { baseUrl: window.location.origin } }
     };
 
     class ConfigManager {

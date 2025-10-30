@@ -5,7 +5,7 @@
       return window.AIMHSA.Config.getApiBaseUrl();
     }
     // Fallback to auto-detection
-    return `https://${window.location.hostname}`;
+    return window.location.origin;
   };
   
   const API_BASE_URL = getAPIBaseUrl();
