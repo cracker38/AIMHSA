@@ -3,19 +3,10 @@ Professional Multilingual Chatbot Translation Service
 Supports English, French, Kiswahili, and Kinyarwanda
 
 Features:
-- Pattern-based detection: Detects Kinyarwanda, French, Kiswahili, and English using keyword patterns
-- Falls back to langdetect if patterns are unclear
-- Google Translator integration: Uses GoogleTranslator from deep_translator for accurate translations
-- Language-specific normalization: Post-processes translations for Kinyarwanda, French, and Kiswahili to remove artifacts and ensure natural output
-- Automatic workflow: Detects user language → translates query to English for RAG → translates response back to user's language
-- This keeps the AI reasoning in English while the user sees responses in their preferred language
-
-Integration:
 - Automatic language detection from user input
-- Exclusively responds in the detected language (pure language, no mixed languages)
+- Exclusively responds in the detected language
 - Uses GoogleTranslator from deep_translator for accurate translation
 - Maintains natural tone, accuracy, and clarity in all supported languages
-- Post-processing normalization removes mixed-language artifacts
 """
 from typing import Dict, List, Optional, Tuple
 from langdetect import detect, detect_langs, DetectorFactory
@@ -298,28 +289,15 @@ class TranslationService:
         """
         Post-process Kinyarwanda to remove mixed-language fragments and enforce
         consistent, professional terminology using a small domain glossary.
-        Also removes repetitive/nonsensical patterns.
         """
         if not text:
             return text
         
         normalized = text
-        
-        # Remove repetitive meaningless patterns (common translation artifacts)
-        repetitive_patterns = [
-            r'kuhusisha kuri wabibi[,\s]*kuhusisha kuri wabibi[,\s]*kuhusisha kuri wabibi[,\s]*',
-            r'uwoneka kuri wabwenzi[,\s]*uwoneka kuri wabwenzi[,\s]*uwoneka kuri wabwenzi[,\s]*',
-            r'kuhusisha kuri wabwenzi[,\s]*kuhusisha kuri wabwenzi[,\s]*kuhusisha kuri wabwenzi[,\s]*',
-            r'(.{5,30}[,\s]*)\1{2,}',  # Remove phrases repeated 3+ times (5-30 chars)
-        ]
-        
-        for pattern in repetitive_patterns:
-            normalized = re.sub(pattern, '', normalized, flags=re.IGNORECASE)
-        
         # Remove common French connective phrases that sometimes leak in
         french_leak_patterns = [
             r"(?i)ligne d'assistance en santé mentale",
-            r"(?i)\b(pour|avec|sans|dans|sur|entre|car|donc|mais|ou)\b",
+            r"(?i)pour|avec|sans|dans|sur|entre|car|donc|mais|ou",
         ]
         for pat in french_leak_patterns:
             normalized = re.sub(pat, "", normalized)
@@ -328,19 +306,10 @@ class TranslationService:
         for pat, repl in self.rw_glossary:
             normalized = re.sub(pat, repl, normalized)
 
-        # Remove excessive repetition of the same word
-        normalized = re.sub(r'\b(\w+)\s+\1\s+\1\b', r'\1', normalized, flags=re.IGNORECASE)
-
         # Trim repetitive spaces and stray punctuation
         normalized = re.sub(r"\s+", " ", normalized).strip()
         normalized = re.sub(r"\s+,", ",", normalized)
-        normalized = re.sub(r",\s*,", ",", normalized)  # Remove double commas
         normalized = re.sub(r"\s+\.", ".", normalized)
-        normalized = re.sub(r"\.\s*\.", ".", normalized)  # Remove double periods
-        
-        # Remove trailing incomplete phrases
-        normalized = re.sub(r',\s*$', '.', normalized)
-        
         return normalized
     
     def normalize_french(self, text: str) -> str:
