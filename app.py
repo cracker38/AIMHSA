@@ -3953,7 +3953,8 @@ def update_professional_profile():
 @app.get("/professional/profile")
 def get_professional_profile():
     """Get current professional's profile information"""
-    professional_id = request.headers.get('X-Professional-ID')
+    # Accept either query param (?id=) or header (X-Professional-ID)
+    professional_id = request.args.get('id') or request.headers.get('X-Professional-ID')
     if not professional_id:
         return jsonify({"error": "Professional ID required"}), 400
     
@@ -4018,8 +4019,8 @@ def get_professional_dashboard_stats():
     try:
         conn = sqlite3.connect(DB_FILE)
         
-        # Get professional ID from session or request
-        professional_id = request.headers.get('X-Professional-ID', '1')  # Default to Jean Ntwari for testing
+        # Get professional ID from request
+        professional_id = request.args.get('id') or request.headers.get('X-Professional-ID', '1')
         
         # Total sessions
         total_sessions = conn.execute("""
@@ -4062,7 +4063,7 @@ def get_professional_sessions():
     """Get sessions for professional"""
     try:
         limit = request.args.get('limit', 50)
-        professional_id = request.headers.get('X-Professional-ID', '1')  # Default to Jean Ntwari for testing
+        professional_id = request.args.get('id') or request.headers.get('X-Professional-ID', '1')
         
         conn = sqlite3.connect(DB_FILE)
         
@@ -4534,6 +4535,7 @@ def get_professional_notifications():
                 'type': r[3],
                 'isRead': bool(r[4]),
                 'createdAt': r[5],
+                'created_ts': r[5],  # keep snake_case for advanced dashboard compatibility
             }
             for r in rows
         ]
