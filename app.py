@@ -1057,16 +1057,13 @@ SYSTEM_PROMPT = """You are AIMHSA (AI Mental Health Support Assistant), a profes
 - You understand Rwanda's unique context, including post-genocide mental health needs and cultural considerations
 - You maintain the highest standards of professional mental health support
 
-## Language Capabilities & Rules - CRITICAL
+## Language Capabilities & Rules
 - AUTOMATICALLY detect the user's language and respond EXCLUSIVELY in that same language
 - NEVER mix multiple languages in one response
-- NEVER include translations in parentheses like "(Hello)" or other language explanations
-- NEVER add explanations or translations in other languages
-- Respond in PURE language only - no mixed languages, no translations, no explanations in other languages
-- If user writes in English → respond in pure English only
-- If user writes in French → respond in pure French only  
-- If user writes in Kiswahili → respond in pure Kiswahili only
-- If user writes in Kinyarwanda → respond in pure Kinyarwanda only - NO English translations
+- If user writes in English → respond in English
+- If user writes in French → respond in French  
+- If user writes in Kiswahili → respond in Kiswahili
+- If user writes in Kinyarwanda → respond in pure Kinyarwanda
 - Maintain professional, empathetic tone in all languages
 
 ## Professional Boundaries
@@ -1718,38 +1715,32 @@ def create_language_specific_prompt(target_language: str) -> str:
 Professional Guidelines:
 - Be warm, empathetic, and culturally sensitive
 - Provide evidence-based information from the context when available
-- ALWAYS respond in English ONLY - do not mix languages
-- NEVER include translations in parentheses like "(Hello)" or other language explanations
-- NEVER add explanations or translations in other languages
-- Respond in pure English - no mixed languages or translations
+- ALWAYS respond in English - do not mix languages
 - Do NOT diagnose or prescribe medications
 - Encourage professional care when appropriate
 - For emergencies, always mention Rwanda's Mental Health Hotline: 105
 - Keep responses professional, concise, and helpful
 - Use the provided context to give accurate, relevant information
-- Maintain a natural, conversational tone in English ONLY
+- Maintain a natural, conversational tone in English
 - Ensure professional mental health support standards
 
-Remember: You are a professional mental health support system designed to provide immediate, culturally-appropriate assistance while connecting users to professional care when needed. Always respond in pure English only - never mix languages or add translations.""",
+Remember: You are a professional mental health support system designed to provide immediate, culturally-appropriate assistance while connecting users to professional care when needed.""",
 
         'fr': """Vous êtes AIMHSA, un assistant professionnel de soutien en santé mentale pour le Rwanda.
 
 Directives professionnelles:
 - Soyez chaleureux, empathique et culturellement sensible
 - Fournissez des informations basées sur des preuves du contexte quand disponible
-- RÉPONDEZ TOUJOURS en français UNIQUEMENT - ne mélangez pas les langues
-- N'AJOUTEZ JAMAIS de traductions entre parenthèses comme "(Hello)" ou d'explications dans d'autres langues
-- N'AJOUTEZ JAMAIS d'explications ou de traductions dans d'autres langues
-- Répondez en français pur - pas de langues mélangées ou de traductions
+- RÉPONDEZ TOUJOURS en français - ne mélangez pas les langues
 - NE diagnostiquez PAS et ne prescrivez PAS de médicaments
 - Encouragez les soins professionnels quand approprié
 - Pour les urgences, mentionnez toujours la ligne d'assistance en santé mentale du Rwanda: 105
 - Gardez les réponses professionnelles, concises mais utiles
 - Utilisez le contexte fourni pour donner des informations précises et pertinentes
-- Maintenez un ton naturel et conversationnel en français UNIQUEMENT
+- Maintenez un ton naturel et conversationnel en français
 - Assurez des standards professionnels de soutien en santé mentale
 
-Rappelez-vous: Vous êtes un système professionnel de soutien en santé mentale conçu pour fournir une assistance immédiate et culturellement appropriée tout en connectant les utilisateurs aux soins professionnels quand nécessaire. Répondez toujours en français pur uniquement - ne mélangez jamais les langues ou n'ajoutez pas de traductions.""",
+Rappelez-vous: Vous êtes un système professionnel de soutien en santé mentale conçu pour fournir une assistance immédiate et culturellement appropriée tout en connectant les utilisateurs aux soins professionnels quand nécessaire.""",
 
         'rw': """Uri AIMHSA, umufasha w'ubuzima bw'ubwoba bw'u Rwanda w'ubuhanga.
 
@@ -1759,102 +1750,31 @@ Amabwiriza y'ubuhanga:
 - Ku bihano, tanga umutwe wa Ligne d'assistance en santé mentale y'u Rwanda: 105
 - Komeza amajwi make ariko akunze
 - Koresha icyerekezo cyatanzwe kugira ngo utange amakuru y'ukuri kandi yihariye
-- VUGURA BURI GIHE mu Kinyarwanda GUSA - NTUVUGE mu ndimi zindi
-- NTUWONGEREHO amagambo y'icyongereza mu masonga cyangwa mu bikurikirane
-- NTUWONGEREHO ugereranyo y'icyongereza mu bikurikirane (NTUWONGEREHO "(Hello)" cyangwa imvugo zindi z'ubwongereza)
-- Koresha amagambo y'ukuri mu Kinyarwanda GUSA - NTUVUGE mu ndimi zindi
+- VUGURA BURI GIHE mu Kinyarwanda - NTUVUGE mu ndimi zindi
+- Koresha amagambo y'ukuri mu Kinyarwanda gusa
 - NTUVUGE mu ndimi zindi cyangwa utangire amagambo y'icyongereza
-- Komeza uko uvuga mu Kinyarwanda GUSA, ube w'ubuhanga
-- NTUWONGEREHO icyongereza cyangwa imvugo z'ubwongereza mu makuru yawe
+- Komeza uko uvuga mu Kinyarwanda gusa, ube w'ubuhanga
 
-Wibuke: Uri hano kugira ngo ushyigikire, si kugira ngo usimbure ubuvuzi bw'ubuzima bw'ubwoba bw'ubuhanga. Vugura mu Kinyarwanda GUSA, ube w'ubuhanga. NTUWONGEREHO amagambo y'icyongereza cyangwa imvugo z'ubwongereza.""",
+Wibuke: Uri hano kugira ngo ushyigikire, si kugira ngo usimbure ubuvuzi bw'ubuzima bw'ubwoba bw'ubuhanga. Vugura mu Kinyarwanda gusa, ube w'ubuhanga.""",
 
         'sw': """Wewe ni AIMHSA, msaidizi wa kitaaluma wa afya ya akili wa Rwanda.
 
 Miongozo ya kitaaluma:
 - Kuwa mtu wa moyo mzuri, wa huruma, na wa utamaduni
 - Toa taarifa zilizotolewa kwa mazingira wakati wa muda wowote
-- JIBU KILA WAKATI kwa Kiswahili TU - usichanganye lugha
-- USIWAONGEZE tafsiri kwenye mabano kama "(Hello)" au maelezo ya lugha nyingine
-- USIWAONGEZE maelezo au tafsiri katika lugha nyingine
-- Jibu kwa Kiswahili safi tu - hakuna lugha zilizochanganywa au tafsiri
+- JIBU KILA WAKATI kwa Kiswahili - usichanganye lugha
 - USITOE utambuzi au USITOE dawa
 - Himiza huduma ya kitaaluma wakati wowote
 - Kwa dharura, sema daima Ligne d'assistance en santé mentale ya Rwanda: 105
 - Weka majibu ya kitaaluma, mafupi lakini ya manufaa
 - Tumia mazingira yaliyotolewa kutoa taarifa sahihi na muhimu
-- Endelea kuzungumza kwa Kiswahili TU peke yake
+- Endelea kuzungumza kwa Kiswahili tu
 - Hakikisha viwango vya kitaaluma vya msaada wa afya ya akili
 
-Kumbuka: Wewe ni mfumo wa kitaaluma wa msaada wa afya ya akili ulioundwa kutoa msaada wa haraka na wa kitamaduni wakati wa kuhusisha watumiaji na huduma za kitaaluma wakati zinahitajika. Jibu kila wakati kwa Kiswahili safi tu - usichanganye lugha au kuongeza tafsiri."""
+Kumbuka: Wewe ni mfumo wa kitaaluma wa msaada wa afya ya akili ulioundwa kutoa msaada wa haraka na wa kitamaduni wakati wa kuhusisha watumiaji na huduma za kitaaluma wakati zinahitajika."""
     }
     
     return prompts.get(target_language, prompts['en'])
-
-def clean_response(response: str, target_language: str) -> str:
-    """
-    Clean and validate response to remove repetitive, nonsensical, or meaningless text.
-    Ensures the response is clean, meaningful, and in the correct language only.
-    """
-    if not response or not isinstance(response, str):
-        return response
-    
-    # Remove excessive repetition (same phrase repeated 3+ times)
-    import re
-    words = response.split()
-    if len(words) > 0:
-        # Check for excessive repetition of phrases
-        # Split into sentences first
-        sentences = re.split(r'[.!?]\s+', response)
-        seen_sentences = set()
-        unique_sentences = []
-        for sentence in sentences:
-            sentence_clean = sentence.strip().lower()
-            # Skip if this sentence appears more than once
-            if sentence_clean not in seen_sentences or len(sentence_clean) > 20:
-                unique_sentences.append(sentence)
-                seen_sentences.add(sentence_clean)
-        
-        # Reconstruct response
-        cleaned = '. '.join(unique_sentences).strip()
-        if cleaned and len(cleaned) > 10:
-            response = cleaned
-    
-    # Remove repetitive patterns (same word/phrase repeated multiple times)
-    # Pattern: "word word word" or "phrase, phrase, phrase"
-    response = re.sub(r'(\b\w+\b\s+)\1{2,}', r'\1', response)  # Remove word repetition
-    
-    # Remove meaningless repetitive phrases (common translation artifacts)
-    meaningless_patterns = [
-        r'kuhusisha kuri wabibi[,\s]*kuhusisha kuri wabibi[,\s]*',
-        r'uwoneka kuri wabwenzi[,\s]*uwoneka kuri wabwenzi[,\s]*',
-        r'kuhusisha kuri wabwenzi[,\s]*kuhusisha kuri wabwenzi[,\s]*',
-        r'(.+?[,\s]*)\1{2,}',  # General pattern: any phrase repeated 3+ times
-    ]
-    
-    for pattern in meaningless_patterns:
-        response = re.sub(pattern, '', response, flags=re.IGNORECASE)
-    
-    # Clean up excessive whitespace
-    response = re.sub(r'\s+', ' ', response).strip()
-    
-    # Remove trailing commas and incomplete sentences
-    response = re.sub(r',\s*$', '.', response)
-    
-    # Validate minimum meaningful length
-    if len(response.strip()) < 15:
-        return None  # Response too short, likely meaningless
-    
-    # Check for excessive repetition ratio
-    words = response.split()
-    if len(words) > 0:
-        unique_words = set(words)
-        repetition_ratio = len(unique_words) / len(words)
-        # If less than 30% of words are unique, response is likely repetitive/nonsensical
-        if repetition_ratio < 0.3 and len(words) > 20:
-            return None
-    
-    return response.strip()
 
 def determine_target_language(current_query: str, server_history: List[Dict], max_history_samples: int = 5) -> str:
     """
@@ -1865,35 +1785,34 @@ def determine_target_language(current_query: str, server_history: List[Dict], ma
     """
     app.logger.info(f"Determining language for query: '{current_query[:50]}...'")
     
-    # First priority: Current query language detection using translation service
-    # The translation service uses comprehensive pattern-based detection
+    # First priority: Current query language detection
     try:
         current_lang = translation_service.detect_language(current_query or "")
-        app.logger.info(f"Translation service detected current query language: {current_lang}")
+        app.logger.info(f"Detected current query language: {current_lang}")
         
-        # The translation service's detect_language already uses pattern matching internally
-        # so we can trust its detection. If it returns a non-English language, use it.
-        if current_lang and current_lang in translation_service.supported_languages:
-            app.logger.info(f"Using detected language: {current_lang}")
+        # If current query language is detected with high confidence, use it immediately
+        if current_lang and current_lang != 'en':
+            app.logger.info(f"Using non-English current query language: {current_lang}")
             return current_lang
-        
-        # Fallback: If detection returns 'en' but we suspect it might be wrong,
-        # use pattern-based detection as a second check
-        if current_lang == 'en':
-            # Check for strong non-English patterns using the translation service's pattern detector
-            pattern_lang = translation_service._detect_by_patterns(current_query)
-            if pattern_lang and pattern_lang != 'en' and pattern_lang in translation_service.supported_languages:
-                app.logger.info(f"Pattern-based override detected: {pattern_lang}")
-                return pattern_lang
+        elif current_lang == 'en':
+            # Check if this might be a false positive for English
+            # Look for non-English patterns in the query
+            non_english_indicators = [
+                'muraho', 'murakoze', 'ndabishimye',  # Kinyarwanda
+                'bonjour', 'merci', 'je suis',  # French  
+                'hujambo', 'asante', 'nina'  # Kiswahili
+            ]
+            
+            query_lower = current_query.lower()
+            for indicator in non_english_indicators:
+                if indicator in query_lower:
+                    # Re-detect with more aggressive pattern matching
+                    pattern_lang = translation_service._detect_by_patterns(current_query)
+                    if pattern_lang and pattern_lang != 'en':
+                        app.logger.info(f"Pattern override detected: {pattern_lang}")
+                        return pattern_lang
     except Exception as e:
         app.logger.warning(f"Language detection error for current query: {e}")
-        # Try direct pattern detection as fallback
-        try:
-            pattern_lang = translation_service._detect_by_patterns(current_query)
-            if pattern_lang and pattern_lang in translation_service.supported_languages:
-                return pattern_lang
-        except:
-            pass
         current_lang = "en"
 
     # Second priority: Check recent conversation history for consistency
@@ -1909,18 +1828,16 @@ def determine_target_language(current_query: str, server_history: List[Dict], ma
         if len(recent_user_texts) >= max_history_samples:
             break
 
-    # Analyze recent messages for language consistency using translation service
+    # Analyze recent messages for language consistency
     if recent_user_texts:
         language_votes: Dict[str, int] = {}
         
         for text in recent_user_texts:
             try:
-                # Use translation service's comprehensive detection
                 detected_lang = translation_service.detect_language(text)
-                if detected_lang and detected_lang in translation_service.supported_languages:
+                if detected_lang:
                     language_votes[detected_lang] = language_votes.get(detected_lang, 0) + 1
-            except Exception as e:
-                app.logger.debug(f"Error detecting language in history: {e}")
+            except Exception:
                 continue
         
         # Find the most common language in recent history
@@ -2087,16 +2004,8 @@ def ask():
                 # already present server-side; still include in messages so model has recent context
                 messages.append({"role": role, "content": content})
 
-    # Determine stable target language from this query and recent history
-    # Uses translation_service.detect_language() with comprehensive pattern-based detection
-    # This ensures accurate language detection for Kinyarwanda, French, Kiswahili, and English
-    target_language = determine_target_language(query, server_history)
-    app.logger.info(f"Target language determined: {target_language}")
-    
     # retrieval-based context
     # Retrieve more context for better grounded answers
-    # Note: Query translation to English for RAG is handled automatically via language-specific prompts
-    # The AI model generates responses directly in the target language, maintaining pure language responses
     top = retrieve(query, k=6)
     context = build_context(top)
 
@@ -2106,15 +2015,16 @@ If the question is outside mental health scope, politely explain your specializa
 If the context is insufficient, be honest and provide safe, general guidance.
 If the user greets you or asks for general help, respond helpfully without requiring context.
 
-CRITICAL: Respond ONLY in the language the user is using. Do NOT include translations in parentheses. Do NOT mix languages. 
-Respond in pure {target_language} only - no English translations, no explanations in other languages.
-
 QUESTION:
 {query}
 
 CONTEXT:
 {context}
 """
+
+    # Determine stable target language from this query and recent history
+    target_language = determine_target_language(query, server_history)
+    app.logger.info(f"Target language determined: {target_language}")
     
     # Create language-specific system prompt for direct AI response generation
     system_prompt = create_language_specific_prompt(target_language)
@@ -2207,37 +2117,9 @@ CONTEXT:
         
         # Generate response using Hugging Face model
         answer = ai_service.generate_response(messages)
-        app.logger.info(f"AI response received: {answer[:100]}...")
+        app.logger.info(f"Hugging Face response received: {answer[:100]}...")
         
-        # Step 1: Clean response to remove repetitive/nonsensical text
-        if answer:
-            cleaned_answer = clean_response(answer, target_language)
-            if cleaned_answer:
-                answer = cleaned_answer
-                app.logger.info(f"Cleaned response: {answer[:100]}...")
-            else:
-                app.logger.warning(f"Response failed validation, using fallback")
-                answer = None  # Will trigger fallback below
-        
-        # Step 2: Post-process answer using translation service to ensure pure language response
-        # This normalizes the response and removes any mixed-language artifacts
-        if answer and target_language != 'en':
-            try:
-                # Normalize the response based on target language to remove mixed languages
-                if target_language == 'rw':
-                    answer = translation_service.normalize_kinyarwanda(answer)
-                elif target_language == 'fr':
-                    answer = translation_service.normalize_french(answer)
-                elif target_language == 'sw':
-                    answer = translation_service.normalize_kiswahili(answer)
-                
-                # Re-clean after normalization to catch any new repetition
-                answer = clean_response(answer, target_language) or answer
-                app.logger.info(f"Normalized response for {target_language}: {answer[:100]}...")
-            except Exception as e:
-                app.logger.warning(f"Normalization failed, using original response: {e}")
-        
-        # Check if answer is empty, too short, or failed validation
+        # Check if answer is empty or too short
         if not answer or len(answer.strip()) < 10:
             app.logger.warning(f"Answer too short or empty: '{answer}'")
             # Provide a helpful default response
@@ -4617,34 +4499,45 @@ def get_notifications():
 def get_professional_notifications():
     """Get notifications for professional"""
     try:
-        limit = request.args.get('limit', 50)
-        professional_id = request.headers.get('X-Professional-ID', '1')  # Default to Jean Ntwari for testing
-        
+        # Support both query param (?id=) and header (X-Professional-ID)
+        professional_id = request.args.get('id') or request.headers.get('X-Professional-ID') or '1'
+        limit = int(request.args.get('limit', 50))
+
         conn = sqlite3.connect(DB_FILE)
-        
-        notifications = conn.execute("""
-            SELECT id, title, message, notification_type, is_read, created_at
-            FROM professional_notifications 
+
+        # Use correct timestamp column created_ts
+        rows = conn.execute(
+            """
+            SELECT id, title, message, notification_type, is_read, created_ts
+            FROM professional_notifications
             WHERE professional_id = ?
-            ORDER BY created_at DESC
+            ORDER BY created_ts DESC
             LIMIT ?
-        """, (professional_id, limit)).fetchall()
-        
+            """,
+            (professional_id, limit),
+        ).fetchall()
+
         conn.close()
-        
-        notifications_data = []
-        for notification in notifications:
-            notifications_data.append({
-                'id': notification[0],
-                'title': notification[1],
-                'message': notification[2],
-                'type': notification[3],
-                'isRead': bool(notification[4]),
-                'createdAt': notification[5]
-            })
-        
-        return jsonify(notifications_data)
-        
+
+        notifications = [
+            {
+                'id': r[0],
+                'title': r[1],
+                'message': r[2],
+                'type': r[3],
+                'isRead': bool(r[4]),
+                'createdAt': r[5],
+            }
+            for r in rows
+        ]
+
+        # Return an object for compatibility with professional_advanced.js
+        return jsonify({
+            'notifications': notifications,
+            'count': len(notifications),
+            'professionalId': professional_id,
+        })
+
     except Exception as e:
         app.logger.error(f"Error getting notifications: {e}")
         return jsonify({'error': 'Failed to get notifications'}), 500
