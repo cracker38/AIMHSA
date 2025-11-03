@@ -1170,12 +1170,19 @@ def rebuild_vector_store():
         
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            # Note: ollama.embeddings is for single prompt, for batch we need to call individually
-            batch_embeddings = []
-            for text in batch:
-                resp = _retry_ollama_call(ollama.embeddings, model=EMBED_MODEL, prompt=text)
-                batch_embeddings.append(resp["embedding"])
-            all_embeddings.extend(batch_embeddings)
+            # Use OpenAI-compatible embeddings client; supports batch input
+            try:
+                resp = openai_client.embeddings.create(
+                    model=EMBED_MODEL,
+                    input=batch
+                )
+                batch_embeddings = [d.embedding for d in resp.data]
+                all_embeddings.extend(batch_embeddings)
+            except Exception as e:
+                app.logger.error(f"Embedding batch failed, falling back to per-item: {e}")
+                for text in batch:
+                    single = openai_client.embeddings.create(model=EMBED_MODEL, input=text)
+                    all_embeddings.append(single.data[0].embedding)
             
         # add embeddings to chunks
         for chunk, embedding in zip(chunks, all_embeddings):
