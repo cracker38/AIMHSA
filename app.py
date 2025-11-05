@@ -2698,9 +2698,18 @@ def register():
     province = (data.get("province") or "").strip()
     district = (data.get("district") or "").strip()
     password = (data.get("password") or "")
+    captcha_answer = data.get("captcha_answer")
     
     # Collect validation errors
     errors = {}
+    
+    # CAPTCHA validation
+    try:
+        captcha_value = int(captcha_answer) if captcha_answer is not None else None
+        if captcha_value is None or captcha_value < 0 or captcha_value > 20:
+            errors["captcha"] = "Please complete the human verification"
+    except (ValueError, TypeError):
+        errors["captcha"] = "Invalid human verification answer"
     
     # Validate required fields
     if not username:
@@ -2841,8 +2850,18 @@ def login():
         return jsonify({"error": "Invalid JSON"}), 400
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "")
+    captcha_answer = data.get("captcha_answer")
+    
     if not email or not password:
         return jsonify({"error": "email and password required"}), 400
+    
+    # CAPTCHA validation
+    try:
+        captcha_value = int(captcha_answer) if captcha_answer is not None else None
+        if captcha_value is None or captcha_value < 0 or captcha_value > 20:
+            return jsonify({"error": "Please complete the human verification"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid human verification answer"}), 400
     
     # Email validation
     import re

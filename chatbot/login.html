@@ -40,6 +40,26 @@
 	                    </label>
 	                    <a class="forgot-link" id="forgotLink" href="#">Forgot password?</a>
 	                </div>
+	                
+	                <!-- Human Verification (CAPTCHA) -->
+	                <div class="form-group" id="captchaGroup">
+	                    <label for="captchaAnswer">Human Verification *</label>
+	                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+	                        <span id="captchaQuestion" style="font-size: 16px; font-weight: 600; color: #2c5aa0; padding: 8px 12px; background: #f0f4ff; border-radius: 6px; min-width: 120px; text-align: center;"></span>
+	                        <button type="button" id="refreshCaptcha" style="padding: 8px 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 14px;" title="Refresh verification">
+	                            <i class="fas fa-sync-alt"></i> New
+	                        </button>
+	                    </div>
+	                    <input type="number" id="captchaAnswer" name="captchaAnswer" 
+	                           placeholder="Enter your answer" 
+	                           min="0" 
+	                           max="100" 
+	                           required 
+	                           style="width: 100%;" />
+	                    <div class="field-error" id="captchaError"></div>
+	                    <input type="hidden" id="captchaSolution" />
+	                </div>
+	                
                 <button type="submit" class="auth-btn" id="signInBtn">Sign In</button>
             </form>
             

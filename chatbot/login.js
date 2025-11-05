@@ -73,6 +73,86 @@
     const mfaVerifyBtn = document.getElementById('mfaVerifyBtn');
     const mfaResendBtn = document.getElementById('mfaResendBtn');
     const mfaMessage = document.getElementById('mfaMessage');
+    // CAPTCHA elements
+    const captchaQuestion = document.getElementById('captchaQuestion');
+    const captchaAnswer = document.getElementById('captchaAnswer');
+    const captchaSolution = document.getElementById('captchaSolution');
+    const captchaError = document.getElementById('captchaError');
+    const refreshCaptcha = document.getElementById('refreshCaptcha');
+    
+    // Generate CAPTCHA
+    function generateCaptcha() {
+        const num1 = Math.floor(Math.random() * 10) + 1;
+        const num2 = Math.floor(Math.random() * 10) + 1;
+        const operations = ['+', '-'];
+        const operation = operations[Math.floor(Math.random() * operations.length)];
+        
+        let question, solution;
+        if (operation === '+') {
+            question = `${num1} + ${num2}`;
+            solution = num1 + num2;
+        } else {
+            // Ensure result is positive
+            const larger = Math.max(num1, num2);
+            const smaller = Math.min(num1, num2);
+            question = `${larger} - ${smaller}`;
+            solution = larger - smaller;
+        }
+        
+        captchaQuestion.textContent = question;
+        captchaSolution.value = solution;
+        captchaAnswer.value = '';
+        captchaError.textContent = '';
+        captchaAnswer.classList.remove('error');
+    }
+    
+    // Validate CAPTCHA
+    function validateCaptcha() {
+        const userAnswer = parseInt(captchaAnswer.value);
+        const correctAnswer = parseInt(captchaSolution.value);
+        
+        if (isNaN(userAnswer)) {
+            captchaError.textContent = 'Please enter a number';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            return false;
+        }
+        
+        if (userAnswer !== correctAnswer) {
+            captchaError.textContent = 'Incorrect answer. Please try again.';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            generateCaptcha(); // Generate new CAPTCHA on wrong answer
+            return false;
+        }
+        
+        captchaError.textContent = '';
+        captchaError.classList.remove('show');
+        captchaAnswer.classList.remove('error');
+        return true;
+    }
+    
+    // Initialize CAPTCHA on page load
+    if (captchaQuestion && captchaSolution) {
+        generateCaptcha();
+        
+        // Refresh CAPTCHA button
+        if (refreshCaptcha) {
+            refreshCaptcha.addEventListener('click', (e) => {
+                e.preventDefault();
+                generateCaptcha();
+            });
+        }
+        
+        // Clear error on input
+        if (captchaAnswer) {
+            captchaAnswer.addEventListener('input', () => {
+                captchaError.textContent = '';
+                captchaError.classList.remove('show');
+                captchaAnswer.classList.remove('error');
+            });
+        }
+    }
     
     // Show message
     function showMessage(text, type = 'error') {
@@ -235,6 +315,14 @@
             return;
         }
         
+        // Validate CAPTCHA
+        if (!validateCaptcha()) {
+            captchaAnswer.focus();
+            signInBtn.disabled = false;
+            signInBtn.textContent = 'Sign In';
+            return;
+        }
+        
         if (rememberMe.checked) {
             localStorage.setItem('aimhsa_saved_email', email);
         } else {
@@ -251,7 +339,11 @@
                 const res = await api('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ 
+                        email, 
+                        password,
+                        captcha_answer: parseInt(captchaAnswer.value)
+                    })
                 });
                 
                 if (res && res.mfa_required) {
@@ -273,7 +365,11 @@
                 const res = await api('/professional/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ 
+                        email, 
+                        password,
+                        captcha_answer: parseInt(captchaAnswer.value)
+                    })
                 });
                 
                 // Store professional data
@@ -298,7 +394,11 @@
                 const res = await api('/admin/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: email, password })
+                    body: JSON.stringify({ 
+                        username: email, 
+                        password,
+                        captcha_answer: parseInt(captchaAnswer.value)
+                    })
                 });
                 
                 console.log('Admin login successful:', res);

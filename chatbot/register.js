@@ -16,10 +16,90 @@
     // Elements
     const registerForm = document.getElementById('registerForm');
     const registerBtn = document.getElementById('registerBtn');
+    // CAPTCHA elements
+    const captchaQuestion = document.getElementById('captchaQuestion');
+    const captchaAnswer = document.getElementById('captchaAnswer');
+    const captchaSolution = document.getElementById('captchaSolution');
+    const captchaError = document.getElementById('captchaError');
+    const refreshCaptcha = document.getElementById('refreshCaptcha');
     
     // Validation state
     let validationErrors = {};
     let isSubmitting = false;
+    
+    // Generate CAPTCHA
+    function generateCaptcha() {
+        const num1 = Math.floor(Math.random() * 10) + 1;
+        const num2 = Math.floor(Math.random() * 10) + 1;
+        const operations = ['+', '-'];
+        const operation = operations[Math.floor(Math.random() * operations.length)];
+        
+        let question, solution;
+        if (operation === '+') {
+            question = `${num1} + ${num2}`;
+            solution = num1 + num2;
+        } else {
+            // Ensure result is positive
+            const larger = Math.max(num1, num2);
+            const smaller = Math.min(num1, num2);
+            question = `${larger} - ${smaller}`;
+            solution = larger - smaller;
+        }
+        
+        captchaQuestion.textContent = question;
+        captchaSolution.value = solution;
+        captchaAnswer.value = '';
+        captchaError.textContent = '';
+        if (captchaAnswer) captchaAnswer.classList.remove('error');
+    }
+    
+    // Validate CAPTCHA
+    function validateCaptcha() {
+        const userAnswer = parseInt(captchaAnswer.value);
+        const correctAnswer = parseInt(captchaSolution.value);
+        
+        if (isNaN(userAnswer)) {
+            captchaError.textContent = 'Please enter a number';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            return false;
+        }
+        
+        if (userAnswer !== correctAnswer) {
+            captchaError.textContent = 'Incorrect answer. Please try again.';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            generateCaptcha(); // Generate new CAPTCHA on wrong answer
+            return false;
+        }
+        
+        captchaError.textContent = '';
+        captchaError.classList.remove('show');
+        captchaAnswer.classList.remove('error');
+        return true;
+    }
+    
+    // Initialize CAPTCHA on page load
+    if (captchaQuestion && captchaSolution) {
+        generateCaptcha();
+        
+        // Refresh CAPTCHA button
+        if (refreshCaptcha) {
+            refreshCaptcha.addEventListener('click', (e) => {
+                e.preventDefault();
+                generateCaptcha();
+            });
+        }
+        
+        // Clear error on input
+        if (captchaAnswer) {
+            captchaAnswer.addEventListener('input', () => {
+                captchaError.textContent = '';
+                captchaError.classList.remove('show');
+                captchaAnswer.classList.remove('error');
+            });
+        }
+    }
     
     // API helper
     async function api(path, opts) {
@@ -79,7 +159,8 @@
             'province': 'regProvince',
             'district': 'regDistrict',
             'password': 'regPassword',
-            'confirmPassword': 'regConfirmPassword'
+            'confirmPassword': 'regConfirmPassword',
+            'captcha': 'captchaAnswer'
         };
         
         Object.keys(serverErrors).forEach(field => {
@@ -518,6 +599,14 @@
             return;
         }
         
+        // Validate CAPTCHA
+        if (!validateCaptcha()) {
+            captchaAnswer.focus();
+            registerBtn.disabled = false;
+            registerBtn.textContent = 'Create Account';
+            return;
+        }
+        
         const username = document.getElementById('regUsername').value.trim();
         const email = document.getElementById('regEmail').value.trim();
         const fullname = document.getElementById('regFullname').value.trim();
@@ -541,7 +630,8 @@
                     telephone, 
                     province, 
                     district, 
-                    password 
+                    password,
+                    captcha_answer: parseInt(captchaAnswer.value)
                 })
             });
             
