@@ -10,9 +10,10 @@
     let apiRoot;
     try {
         const loc = window.location;
-        if (loc.hostname === 'fezaflora-aimhsa.hf.space') {
-            // Hugging Face Spaces - use HTTPS
-            apiRoot = `${loc.protocol}//${loc.hostname}`;
+        // Check if running on Hugging Face Spaces
+        if (loc.hostname.includes('.hf.space')) {
+            // Hugging Face Spaces - use current origin
+            apiRoot = loc.origin;
         } else if (loc.port === '8000') {
             // Local development with frontend on 8000
             apiRoot = `${loc.protocol}//${loc.hostname}:7860`;
@@ -20,13 +21,33 @@
             // Local development or production without port
             apiRoot = loc.origin;
         } else {
-            // Default fallback
-            apiRoot = 'https://fezaflora-aimhsa.hf.space';
+            // Default fallback - use current origin
+            apiRoot = loc.origin;
         }
     } catch (_) {
-        apiRoot = 'https://fezaflora-aimhsa.hf.space';
+        apiRoot = window.location.origin;
     }
     const API_ROOT = apiRoot;
+    
+    // Helper function to create API fetch with headers
+    function apiFetch(endpoint, options = {}) {
+        const url = `${API_ROOT}${endpoint}`;
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+        
+        // Add professional ID header if available
+        if (currentProfessional?.id || currentProfessional?.professional_id) {
+            const profId = currentProfessional.id || currentProfessional.professional_id;
+            headers['X-Professional-ID'] = String(profId);
+        }
+        
+        return fetch(url, {
+            ...options,
+            headers
+        });
+    }
     
     console.log('🌐 Professional Dashboard API Root:', API_ROOT);
 
@@ -180,19 +201,19 @@
     function loadDashboardStats() {
         console.log('📈 Loading dashboard stats...');
         
-        fetch(`${API_ROOT}/professional/dashboard-stats?id=${currentProfessional.id}`)
+        apiFetch('/professional/dashboard-stats')
             .then(response => response.json())
             .then(data => {
                 console.log('📊 Dashboard stats received:', data);
                 
                 // Update KPI cards
-                $('#totalSessions').text(data.total_sessions || 0);
-                $('#unreadNotifications').text(data.unread_notifications || 0);
-                $('#upcomingToday').text(data.today_sessions || 0);
-                $('#highRiskSessions').text(data.high_risk_sessions || 0);
+                $('#totalSessions').text(data.totalSessions || data.total_sessions || 0);
+                $('#unreadNotifications').text(data.unreadNotifications || data.unread_notifications || 0);
+                $('#upcomingToday').text(data.upcomingToday || data.today_sessions || 0);
+                $('#highRiskSessions').text(data.highRiskCases || data.high_risk_sessions || 0);
                 
                 // Update notification badge
-                $('#notificationCount').text(data.unread_notifications || 0);
+                $('#notificationCount').text(data.unreadNotifications || data.unread_notifications || 0);
             })
             .catch(error => {
                 console.error('❌ Error loading dashboard stats:', error);
@@ -207,73 +228,75 @@
         const tbody = $('#sessionsTableBody');
         tbody.html('<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>');
         
-        fetch(`${API_ROOT}/professional/sessions?id=${currentProfessional.id}`)
+        apiFetch('/professional/sessions')
             .then(response => response.json())
             .then(data => {
                 console.log('📅 Sessions data received:', data);
-        tbody.empty();
+                tbody.empty();
 
-                if (data.sessions && data.sessions.length > 0) {
-                    data.sessions.forEach(session => {
-                        const riskClass = getRiskClass(session.risk_level);
-                        const statusClass = getStatusClass(session.booking_status);
-                        const createdDate = new Date(session.created_ts * 1000).toLocaleDateString();
+                // Handle both array and object with sessions property
+                const sessions = Array.isArray(data) ? data : (data.sessions || []);
+                
+                if (sessions && sessions.length > 0) {
+                    sessions.forEach(session => {
+                        const riskClass = getRiskClass(session.riskLevel || session.risk_level);
+                        const statusClass = getStatusClass(session.bookingStatus || session.booking_status);
+                        const createdTs = session.createdTs || session.created_ts;
+                        const createdDate = createdTs ? new Date(createdTs * 1000).toLocaleDateString() : 'N/A';
+                        const scheduledDate = session.scheduledDatetime || session.scheduled_datetime;
+                        const scheduledDateStr = scheduledDate ? new Date(scheduledDate * 1000).toLocaleString() : 'Not scheduled';
                         
-            const row = `
-                            <tr class="session-row" data-id="${session.booking_id}">
+                        const row = `
+                            <tr class="session-row" data-id="${session.bookingId || session.booking_id}">
+                                <td>${session.bookingId || session.booking_id || 'N/A'}</td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="mr-2">
                                             <i class="fas fa-user-circle text-primary"></i>
                                         </div>
                                         <div>
-                                            <strong>${session.user_fullname || 'N/A'}</strong>
-                                            <br><small class="text-muted">@${session.user_account}</small>
+                                            <strong>${session.userName || session.user_fullname || session.userAccount || 'N/A'}</strong>
+                                            <br><small class="text-muted">@${session.userAccount || session.user_account || 'N/A'}</small>
                                         </div>
                                     </div>
                                 </td>
                                 <td>
+                                    <i class="fas fa-calendar-alt text-info mr-1"></i>
+                                    ${scheduledDateStr}
+                                </td>
+                                <td>${session.sessionType || session.session_type || 'Consultation'}</td>
+                                <td>
                                     <span class="badge badge-${riskClass} badge-pill">
-                                        <i class="fas fa-${getRiskIcon(session.risk_level)} mr-1"></i>
-                                        ${session.risk_level?.toUpperCase() || 'N/A'}
+                                        <i class="fas fa-${getRiskIcon(session.riskLevel || session.risk_level)} mr-1"></i>
+                                        ${(session.riskLevel || session.risk_level || 'N/A').toUpperCase()}
                                     </span>
                                 </td>
                                 <td>
                                     <span class="badge badge-${statusClass}">
-                                        ${session.booking_status?.toUpperCase() || 'PENDING'}
+                                        ${(session.bookingStatus || session.booking_status || 'PENDING').toUpperCase()}
                                     </span>
                                 </td>
                                 <td>
-                                    <i class="fas fa-calendar-alt text-info mr-1"></i>
-                                    ${createdDate}
-                                </td>
-                                <td>
-                                    ${session.user_location || 'N/A'}
-                                </td>
-                                <td>
-                                    ${session.session_notes ? 'Yes' : 'No'}
-                                </td>
-                                <td>
                                     <div class="btn-group" role="group">
-                                        ${session.booking_status === 'pending' ? `
-                                            <button class="btn btn-sm btn-success" onclick="acceptSession('${session.booking_id}')" title="Accept Session">
+                                        ${(session.bookingStatus || session.booking_status) === 'pending' ? `
+                                            <button class="btn btn-sm btn-success" onclick="acceptSession('${session.bookingId || session.booking_id}')" title="Accept Session">
                                                 <i class="fas fa-check"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger" onclick="declineSession('${session.booking_id}')" title="Decline Session">
+                                            <button class="btn btn-sm btn-danger" onclick="declineSession('${session.bookingId || session.booking_id}')" title="Decline Session">
                                                 <i class="fas fa-times"></i>
                                             </button>
                                         ` : ''}
-                                        <button class="btn btn-sm btn-primary" onclick="viewSessionDetails('${session.booking_id}')" title="View Details">
+                                        <button class="btn btn-sm btn-primary" onclick="viewSessionDetails('${session.bookingId || session.booking_id}')" title="View Details">
                                             <i class="fas fa-eye"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-info" onclick="addSessionNotes('${session.booking_id}')" title="Add Notes">
+                                        <button class="btn btn-sm btn-info" onclick="addSessionNotes('${session.bookingId || session.booking_id}')" title="Add Notes">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                     </div>
                                 </td>
-                </tr>
-            `;
-            tbody.append(row);
+                            </tr>
+                        `;
+                        tbody.append(row);
                     });
                 } else {
                     tbody.html('<tr><td colspan="7" class="text-center text-muted"><i class="fas fa-calendar-times mr-2"></i>No sessions found</td></tr>');
@@ -281,8 +304,8 @@
             })
             .catch(error => {
                 console.error('❌ Error loading sessions:', error);
-                tbody.html('<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading sessions</td></tr>');
-        });
+                tbody.html('<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading sessions: ' + error.message + '</td></tr>');
+            });
     }
 
     /**
@@ -293,33 +316,37 @@
         const tbody = $('#patientsTableBody');
         tbody.html('<tr><td colspan="7" class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>');
         
-        fetch(`${API_ROOT}/professional/users?id=${currentProfessional.id}`)
+        apiFetch('/professional/booked-users')
             .then(response => response.json())
             .then(data => {
                 console.log('👥 Patients data received:', data);
-        tbody.empty();
+                tbody.empty();
 
-                if (data.users && data.users.length > 0) {
-                    data.users.forEach(user => {
-                        const riskClass = getRiskClass(user.highest_risk_level);
-                        const lastSessionDate = user.last_session_date ? new Date(user.last_session_date * 1000).toLocaleDateString() : 'N/A';
+                // Handle both array and object with users property
+                const users = Array.isArray(data) ? data : (data.users || []);
+                
+                if (users && users.length > 0) {
+                    users.forEach(user => {
+                        const riskClass = getRiskClass(user.highestRiskLevel || user.highest_risk_level);
+                        const lastSessionTs = user.lastBookingTime || user.last_booking_time;
+                        const lastSessionDate = lastSessionTs ? new Date(lastSessionTs * 1000).toLocaleDateString() : 'N/A';
                         
-            const row = `
-                            <tr class="patient-row" data-username="${user.username}">
+                        const row = `
+                            <tr class="patient-row" data-username="${user.userAccount || user.username}">
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="mr-2">
                                             <i class="fas fa-user-circle text-primary"></i>
                                         </div>
                                         <div>
-                                            <strong>${user.fullname || 'N/A'}</strong>
-                                            <br><small class="text-muted">@${user.username}</small>
+                                            <strong>${user.fullName || user.fullname || 'N/A'}</strong>
+                                            <br><small class="text-muted">@${user.userAccount || user.username || 'N/A'}</small>
                                         </div>
                                     </div>
                                 </td>
                                 <td>
                                     <div>
-                                        <a href="mailto:${user.email}" class="text-decoration-none">
+                                        <a href="mailto:${user.email || '#'}" class="text-decoration-none">
                                             <i class="fas fa-envelope mr-1"></i>${user.email || 'N/A'}
                                         </a>
                                         <br>
@@ -328,17 +355,17 @@
                                 </td>
                                 <td>
                                     <i class="fas fa-map-marker-alt text-danger mr-1"></i>
-                                    ${user.district || 'N/A'}, ${user.province || 'N/A'}
+                                    ${user.userLocation || (user.district || 'N/A') + ', ' + (user.province || 'N/A')}
                                 </td>
                                 <td>
                                     <span class="badge badge-info">
-                                        <i class="fas fa-calendar-check mr-1"></i>${user.total_sessions || 0}
+                                        <i class="fas fa-calendar-check mr-1"></i>${user.totalBookings || user.total_bookings || 0}
                                     </span>
                                 </td>
                                 <td>
                                     <span class="badge badge-${riskClass} badge-pill">
-                                        <i class="fas fa-${getRiskIcon(user.highest_risk_level)} mr-1"></i>
-                                        ${user.highest_risk_level?.toUpperCase() || 'N/A'}
+                                        <i class="fas fa-${getRiskIcon(user.highestRiskLevel || user.highest_risk_level)} mr-1"></i>
+                                        ${(user.highestRiskLevel || user.highest_risk_level || 'N/A').toUpperCase()}
                                     </span>
                                 </td>
                                 <td>
@@ -347,28 +374,28 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <button class="btn btn-sm btn-primary" onclick="viewPatientProfile('${user.username}')" title="View Profile">
+                                        <button class="btn btn-sm btn-primary" onclick="viewPatientProfile('${user.userAccount || user.username}')" title="View Profile">
                                             <i class="fas fa-user"></i>
-                        </button>
-                                        <button class="btn btn-sm btn-success" onclick="scheduleSession('${user.username}')" title="Schedule Session">
+                                        </button>
+                                        <button class="btn btn-sm btn-success" onclick="scheduleSession('${user.userAccount || user.username}')" title="Schedule Session">
                                             <i class="fas fa-calendar-plus"></i>
-                        </button>
-                                        <button class="btn btn-sm btn-info" onclick="viewPatientHistory('${user.username}')" title="View History">
+                                        </button>
+                                        <button class="btn btn-sm btn-info" onclick="viewPatientHistory('${user.userAccount || user.username}')" title="View History">
                                             <i class="fas fa-history"></i>
                                         </button>
                                     </div>
-                    </td>
-                </tr>
-            `;
-            tbody.append(row);
-        });
+                                </td>
+                            </tr>
+                        `;
+                        tbody.append(row);
+                    });
                 } else {
                     tbody.html('<tr><td colspan="7" class="text-center text-muted"><i class="fas fa-users-slash mr-2"></i>No patients found</td></tr>');
                 }
             })
             .catch(error => {
                 console.error('❌ Error loading patients:', error);
-                tbody.html('<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading patients</td></tr>');
+                tbody.html('<tr><td colspan="7" class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading patients: ' + error.message + '</td></tr>');
             });
     }
 
@@ -380,41 +407,45 @@
         const container = $('#notificationsList');
         container.html('<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading notifications...</div>');
         
-        fetch(`${API_ROOT}/professional/notifications?id=${currentProfessional.id}`)
+        apiFetch('/professional/notifications')
             .then(response => response.json())
             .then(data => {
                 console.log('🔔 Notifications data received:', data);
-        container.empty();
+                container.empty();
 
-                if (data.notifications && data.notifications.length > 0) {
-                    data.notifications.forEach(notification => {
-                        const isRead = notification.is_read ? 'read' : 'unread';
-                        const priorityClass = notification.priority === 'high' ? 'danger' : notification.priority === 'medium' ? 'warning' : 'info';
-                        const createdDate = new Date(notification.created_ts * 1000).toLocaleString();
+                // Handle both array and object with notifications property
+                const notifications = Array.isArray(data) ? data : (data.notifications || []);
+                
+                if (notifications && notifications.length > 0) {
+                    notifications.forEach(notification => {
+                        const isRead = notification.isRead || notification.is_read;
+                        const isReadClass = isRead ? 'read' : 'unread';
+                        const priority = notification.priority || 'normal';
+                        const priorityClass = priority === 'high' || priority === 'urgent' ? 'danger' : priority === 'medium' ? 'warning' : 'info';
+                        const createdTs = notification.createdAt || notification.created_ts || notification.created_at;
+                        const createdDate = createdTs ? new Date(createdTs * 1000).toLocaleString() : 'N/A';
                         
-            const notificationHtml = `
-                            <div class="alert alert-${priorityClass} alert-dismissible ${isRead}" data-id="${notification.id}">
+                        const notificationHtml = `
+                            <div class="alert alert-${priorityClass} alert-dismissible ${isReadClass}" data-id="${notification.id}">
                                 <button type="button" class="close" onclick="markNotificationRead(${notification.id})">
                                     <span aria-hidden="true">&times;</span>
-                            </button>
-                                <h5><i class="fas fa-bell mr-2"></i>${notification.title}</h5>
-                                <p>${notification.message}</p>
+                                </button>
+                                <h5><i class="fas fa-bell mr-2"></i>${notification.title || 'Notification'}</h5>
+                                <p>${notification.message || ''}</p>
                                 <small class="text-muted">
                                     <i class="fas fa-clock mr-1"></i>${createdDate}
-                                    ${notification.user_account ? ` | <i class="fas fa-user mr-1"></i>${notification.user_account}` : ''}
-                                    ${notification.risk_level ? ` | <i class="fas fa-exclamation-triangle mr-1"></i>${notification.risk_level.toUpperCase()}` : ''}
                                 </small>
-                </div>
-            `;
-            container.append(notificationHtml);
-        });
-        } else {
+                            </div>
+                        `;
+                        container.append(notificationHtml);
+                    });
+                } else {
                     container.html('<div class="text-center text-muted"><i class="fas fa-bell-slash mr-2"></i>No notifications found</div>');
                 }
             })
             .catch(error => {
                 console.error('❌ Error loading notifications:', error);
-                container.html('<div class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading notifications</div>');
+                container.html('<div class="text-center text-danger"><i class="fas fa-exclamation-triangle mr-2"></i>Error loading notifications: ' + error.message + '</div>');
             });
     }
 
@@ -424,30 +455,35 @@
     function loadProfile() {
         console.log('👤 Loading profile...');
         
-        fetch(`${API_ROOT}/professional/profile?id=${currentProfessional.id}`)
+        apiFetch('/professional/profile')
             .then(response => response.json())
             .then(data => {
                 console.log('👤 Profile data received:', data);
                 
-                if (data.professional) {
-                    const prof = data.professional;
-                    
+                // Handle both direct object and nested professional object
+                const prof = data.professional || data;
+                
+                if (prof) {
                     // Update profile information
-                    $('#profileName').text(`${prof.first_name} ${prof.last_name}`);
-                    $('#profileRole').text(prof.specialization);
-                    $('#profileEmail').text(prof.email);
+                    const firstName = prof.first_name || prof.firstName || '';
+                    const lastName = prof.last_name || prof.lastName || '';
+                    const fullName = firstName && lastName ? `${firstName} ${lastName}` : (prof.name || 'Professional');
+                    
+                    $('#profileName').text(fullName);
+                    $('#profileRole').text(prof.specialization || 'Professional');
+                    $('#profileEmail').text(prof.email || 'N/A');
                     $('#profilePhone').text(prof.phone || 'N/A');
-                    $('#profileSpecialization').text(prof.specialization);
                     $('#profileDistrict').text(prof.district || 'N/A');
-                    $('#profileExperience').text(`${prof.experience_years || 0} years`);
-                    $('#profileFee').text(prof.consultation_fee ? `RWF ${prof.consultation_fee.toLocaleString()}` : 'N/A');
+                    $('#profileExperience').text(`${prof.experience_years || prof.experienceYears || 0} years`);
+                    $('#profileFee').text(prof.consultation_fee || prof.consultationFee ? `RWF ${(prof.consultation_fee || prof.consultationFee || 0).toLocaleString()}` : 'N/A');
                     $('#profileBio').text(prof.bio || 'No bio available');
                     
                     // Update expertise areas
                     const expertiseList = $('#profileExpertise');
                     expertiseList.empty();
-                    if (prof.expertise_areas && prof.expertise_areas.length > 0) {
-                        prof.expertise_areas.forEach(area => {
+                    const expertiseAreas = prof.expertise_areas || prof.expertiseAreas || [];
+                    if (Array.isArray(expertiseAreas) && expertiseAreas.length > 0) {
+                        expertiseAreas.forEach(area => {
                             expertiseList.append(`<span class="badge badge-info mr-1 mb-1">${area}</span>`);
                         });
                     } else {
@@ -457,17 +493,34 @@
                     // Update languages
                     const languagesList = $('#profileLanguages');
                     languagesList.empty();
-                    if (prof.languages && prof.languages.length > 0) {
-                        prof.languages.forEach(lang => {
+                    const languages = prof.languages || [];
+                    if (Array.isArray(languages) && languages.length > 0) {
+                        languages.forEach(lang => {
                             languagesList.append(`<span class="badge badge-success mr-1 mb-1">${lang}</span>`);
                         });
                     } else {
                         languagesList.append('<span class="text-muted">No languages specified</span>');
                     }
+                } else {
+                    console.error('❌ No profile data received');
+                    $('#profileName').text('Error loading profile');
+                    $('#profileEmail').text('Error');
+                    $('#profilePhone').text('Error');
+                    $('#profileDistrict').text('Error');
+                    $('#profileExperience').text('Error');
+                    $('#profileFee').text('Error');
+                    $('#profileBio').text('Error loading profile data');
                 }
             })
             .catch(error => {
                 console.error('❌ Error loading profile:', error);
+                $('#profileName').text('Error loading profile');
+                $('#profileEmail').text('Error: ' + error.message);
+                $('#profilePhone').text('Error');
+                $('#profileDistrict').text('Error');
+                $('#profileExperience').text('Error');
+                $('#profileFee').text('Error');
+                $('#profileBio').text('Error loading profile: ' + error.message);
             });
     }
 
@@ -528,9 +581,25 @@
             logout();
         });
         
+        // Refresh dashboard button
+        $('#refreshDashboardBtn').on('click', function() {
+            loadDashboardData();
+        });
+        
         // Add any additional event handlers here
         console.log('🎯 Event handlers initialized');
     }
+    
+    // Global functions for button clicks
+    window.refreshSessions = function() {
+        console.log('🔄 Refreshing sessions...');
+        loadSessions();
+    };
+    
+    window.addNewSession = function() {
+        console.log('➕ Adding new session...');
+        Swal.fire('New Session', 'New session functionality coming soon', 'info');
+    };
 
     /**
      * Logout function
@@ -663,23 +732,21 @@
             }
         }).then((result) => {
             if (result.isConfirmed) {
-                fetch(`${API_ROOT}/professional/sessions/${bookingId}/status`, {
+                apiFetch(`/professional/sessions/${bookingId}/status`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
                     body: JSON.stringify({ 
-                        status: 'accepted',
+                        status: 'confirmed',
+                        professional_id: currentProfessional.id || currentProfessional.professional_id,
                         notes: result.value.notes,
                         suggested_time: result.value.suggestedTime
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.ok) {
+                    if (data.ok || data.success) {
                         Swal.fire('Success!', 'Session accepted successfully', 'success');
                         loadSessions();
-        } else {
+                    } else {
                         Swal.fire('Error!', data.error || 'Failed to accept session', 'error');
                     }
                 })
@@ -728,20 +795,18 @@
             }
             }).then((result) => {
                 if (result.isConfirmed) {
-                fetch(`${API_ROOT}/professional/sessions/${bookingId}/status`, {
+                apiFetch(`/professional/sessions/${bookingId}/status`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
                     body: JSON.stringify({ 
                         status: 'declined',
+                        professional_id: currentProfessional.id || currentProfessional.professional_id,
                         reason: result.value.reason,
                         notes: result.value.notes
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.ok) {
+                    if (data.ok || data.success) {
                         Swal.fire('Declined!', 'Session declined successfully', 'success');
                         loadSessions();
                     } else {
@@ -859,16 +924,16 @@
             }
         }).then((result) => {
             if (result.isConfirmed) {
-                fetch(`${API_ROOT}/professional/sessions/${bookingId}/notes`, {
+                apiFetch(`/professional/sessions/${bookingId}/notes`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(result.value)
+                    body: JSON.stringify({
+                        professional_id: currentProfessional.id || currentProfessional.professional_id,
+                        ...result.value
+                    })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.ok) {
+                    if (data.ok || data.success) {
                         Swal.fire('Success!', 'Session notes added successfully', 'success');
                         loadSessions();
                     } else {
@@ -886,14 +951,15 @@
     window.markNotificationRead = function(notificationId) {
         console.log('✅ Marking notification as read:', notificationId);
         
-        fetch(`${API_ROOT}/professional/notifications/${notificationId}/read`, {
+        apiFetch(`/professional/notifications/${notificationId}/read`, {
             method: 'PUT'
         })
         .then(response => response.json())
         .then(data => {
-            if (data.ok) {
+            if (data.ok || data.success) {
                 $(`.alert[data-id="${notificationId}"]`).removeClass('unread').addClass('read');
                 loadDashboardStats(); // Refresh notification count
+                loadNotifications(); // Refresh notifications list
             }
         })
         .catch(error => {
