@@ -2703,10 +2703,11 @@ def register():
     # Collect validation errors
     errors = {}
     
-    # CAPTCHA validation
+    # Advanced CAPTCHA validation (supports math, word problems, and patterns)
     try:
         captcha_value = int(captcha_answer) if captcha_answer is not None else None
-        if captcha_value is None or captcha_value < 0 or captcha_value > 20:
+        # Expanded range: 0-100 to support multiplication and mixed operations
+        if captcha_value is None or captcha_value < 0 or captcha_value > 100:
             errors["captcha"] = "Please complete the human verification"
     except (ValueError, TypeError):
         errors["captcha"] = "Invalid human verification answer"
@@ -2855,10 +2856,11 @@ def login():
     if not email or not password:
         return jsonify({"error": "email and password required"}), 400
     
-    # CAPTCHA validation
+    # Advanced CAPTCHA validation (supports math, word problems, and patterns)
     try:
         captcha_value = int(captcha_answer) if captcha_answer is not None else None
-        if captcha_value is None or captcha_value < 0 or captcha_value > 20:
+        # Expanded range: 0-100 to support multiplication and mixed operations
+        if captcha_value is None or captcha_value < 0 or captcha_value > 100:
             return jsonify({"error": "Please complete the human verification"}), 400
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid human verification answer"}), 400

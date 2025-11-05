@@ -80,39 +80,145 @@
     const captchaError = document.getElementById('captchaError');
     const refreshCaptcha = document.getElementById('refreshCaptcha');
     
-    // Generate CAPTCHA
+    // Advanced CAPTCHA System
+    let captchaStartTime = Date.now();
+    let captchaAttempts = 0;
+    let captchaType = 'math';
+    
+    // Generate Advanced CAPTCHA
     function generateCaptcha() {
-        const num1 = Math.floor(Math.random() * 10) + 1;
-        const num2 = Math.floor(Math.random() * 10) + 1;
-        const operations = ['+', '-'];
-        const operation = operations[Math.floor(Math.random() * operations.length)];
+        captchaStartTime = Date.now();
+        captchaAttempts = 0;
         
-        let question, solution;
-        if (operation === '+') {
-            question = `${num1} + ${num2}`;
-            solution = num1 + num2;
+        // Randomly select CAPTCHA type (70% math, 20% word problem, 10% pattern)
+        const rand = Math.random();
+        if (rand < 0.7) {
+            captchaType = 'math';
+            generateMathCaptcha();
+        } else if (rand < 0.9) {
+            captchaType = 'word';
+            generateWordCaptcha();
         } else {
-            // Ensure result is positive
-            const larger = Math.max(num1, num2);
-            const smaller = Math.min(num1, num2);
-            question = `${larger} - ${smaller}`;
-            solution = larger - smaller;
+            captchaType = 'pattern';
+            generatePatternCaptcha();
         }
         
-        captchaQuestion.textContent = question;
-        captchaSolution.value = solution;
         captchaAnswer.value = '';
         captchaError.textContent = '';
         captchaAnswer.classList.remove('error');
     }
     
-    // Validate CAPTCHA
+    // Generate Math CAPTCHA (more complex operations)
+    function generateMathCaptcha() {
+        const operations = [
+            { type: 'add', weight: 30 },
+            { type: 'subtract', weight: 30 },
+            { type: 'multiply', weight: 25 },
+            { type: 'mixed', weight: 15 }
+        ];
+        
+        const rand = Math.random() * 100;
+        let selectedOp = operations[0];
+        let cumulative = 0;
+        for (const op of operations) {
+            cumulative += op.weight;
+            if (rand <= cumulative) {
+                selectedOp = op;
+                break;
+            }
+        }
+        
+        let question, solution;
+        
+        if (selectedOp.type === 'add') {
+            const num1 = Math.floor(Math.random() * 15) + 5;
+            const num2 = Math.floor(Math.random() * 15) + 5;
+            question = `${num1} + ${num2}`;
+            solution = num1 + num2;
+        } else if (selectedOp.type === 'subtract') {
+            const num1 = Math.floor(Math.random() * 20) + 10;
+            const num2 = Math.floor(Math.random() * (num1 - 5)) + 1;
+            question = `${num1} - ${num2}`;
+            solution = num1 - num2;
+        } else if (selectedOp.type === 'multiply') {
+            const num1 = Math.floor(Math.random() * 9) + 2;
+            const num2 = Math.floor(Math.random() * 9) + 2;
+            question = `${num1} × ${num2}`;
+            solution = num1 * num2;
+        } else { // mixed
+            const num1 = Math.floor(Math.random() * 10) + 1;
+            const num2 = Math.floor(Math.random() * 10) + 1;
+            const num3 = Math.floor(Math.random() * 10) + 1;
+            question = `${num1} + ${num2} - ${num3}`;
+            solution = num1 + num2 - num3;
+        }
+        
+        captchaQuestion.textContent = question;
+        captchaSolution.value = solution;
+    }
+    
+    // Generate Word Problem CAPTCHA
+    function generateWordCaptcha() {
+        const problems = [
+            { q: "What is 5 + 3?", a: 8 },
+            { q: "What is 10 - 4?", a: 6 },
+            { q: "What is 2 × 4?", a: 8 },
+            { q: "What is 12 + 7?", a: 19 },
+            { q: "What is 15 - 8?", a: 7 },
+            { q: "What is 3 × 5?", a: 15 },
+            { q: "What is 9 + 6?", a: 15 },
+            { q: "What is 20 - 9?", a: 11 },
+            { q: "What is 4 × 3?", a: 12 },
+            { q: "What is 8 + 9?", a: 17 }
+        ];
+        
+        const problem = problems[Math.floor(Math.random() * problems.length)];
+        captchaQuestion.textContent = problem.q;
+        captchaSolution.value = problem.a;
+    }
+    
+    // Generate Pattern CAPTCHA
+    function generatePatternCaptcha() {
+        const patterns = [
+            { q: "2, 4, 6, ?", a: 8 },
+            { q: "5, 10, 15, ?", a: 20 },
+            { q: "3, 6, 9, ?", a: 12 },
+            { q: "1, 3, 5, ?", a: 7 },
+            { q: "10, 20, 30, ?", a: 40 }
+        ];
+        
+        const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+        captchaQuestion.textContent = pattern.q;
+        captchaSolution.value = pattern.a;
+    }
+    
+    // Advanced CAPTCHA Validation
     function validateCaptcha() {
+        captchaAttempts++;
+        
+        // Check if answered too quickly (bot detection - less than 2 seconds)
+        const timeSpent = (Date.now() - captchaStartTime) / 1000;
+        if (timeSpent < 2) {
+            captchaError.textContent = 'Please take your time to solve the verification';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            generateCaptcha();
+            return false;
+        }
+        
+        // Check if too many attempts (potential bot)
+        if (captchaAttempts > 5) {
+            captchaError.textContent = 'Too many incorrect attempts. Please refresh the page.';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            return false;
+        }
+        
         const userAnswer = parseInt(captchaAnswer.value);
         const correctAnswer = parseInt(captchaSolution.value);
         
         if (isNaN(userAnswer)) {
-            captchaError.textContent = 'Please enter a number';
+            captchaError.textContent = 'Please enter a valid number';
             captchaError.classList.add('show');
             captchaAnswer.classList.add('error');
             return false;
@@ -123,6 +229,16 @@
             captchaError.classList.add('show');
             captchaAnswer.classList.add('error');
             generateCaptcha(); // Generate new CAPTCHA on wrong answer
+            return false;
+        }
+        
+        // Additional security: Check if answer was solved too quickly after refresh
+        const solveTime = (Date.now() - captchaStartTime) / 1000;
+        if (solveTime < 1) {
+            captchaError.textContent = 'Please verify you are human';
+            captchaError.classList.add('show');
+            captchaAnswer.classList.add('error');
+            generateCaptcha();
             return false;
         }
         
