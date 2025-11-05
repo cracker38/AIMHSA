@@ -52,20 +52,262 @@ class TranslationService:
         # Domain glossary for consistent Kinyarwanda phrasing
         # Maps common English/French mental health phrases to preferred Kinyarwanda
         self.rw_glossary = [
-            (r"(?i)mental health hotline\s*:?\s*105", "Umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe: 105"),
-            (r"(?i)ligne d'assistance en santé mentale\s*:?\s*105", "Umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe: 105"),
-            (r"(?i)call\s*112", "Hamagara 112 mu gihe cy'ibyago byihutirwa"),
+            # Emergency contacts and hotlines
+            (r"(?i)mental health hotline\s*:?\s*105", "umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe: 105"),
+            (r"(?i)ligne d'assistance en santé mentale\s*:?\s*105", "umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe: 105"),
+            (r"(?i)call\s*112", "hamagara 112 mu gihe cy'ibyago byihutirwa"),
             (r"(?i)emergency", "ibyago byihutirwa"),
+            (r"(?i)hotline", "umurongo wa telefone"),
+            (r"(?i)helpline", "umurongo wa telefone w'ubufasha"),
+            
+            # Hospitals and facilities
             (r"(?i)caraes\s*ndera\s*hospital", "CARAES Ndera"),
             (r"(?i)hdi\s*rwanda\s*counseling", "HDI Rwanda (Inama n'Ubujyanama)"),
             (r"(?i)arct\s*ruhuka", "ARCT Ruhuka"),
-            (r"(?i)mental health", "ubuzima bwo mu mutwe"),
+            
+            # Mental health terms - comprehensive
+            (r"(?i)mental health", "ubuzima bw'ubwoba"),
             (r"(?i)anxiety", "impungenge"),
             (r"(?i)depression", "agahinda kenshi"),
             (r"(?i)stress", "umunaniro w'ubwonko"),
             (r"(?i)coping strategies", "uburyo bwo kwifasha"),
+            (r"(?i)suicide", "kwiyica"),
+            (r"(?i)self-harm", "kwibangamira"),
+            (r"(?i)trauma", "akababaro"),
+            (r"(?i)ptsd", "indwara y'akababaro"),
+            (r"(?i)panic", "guhangayika"),
+            (r"(?i)worry", "kwitwara"),
+            (r"(?i)sad", "guhangayika"),
+            (r"(?i)sadness", "agahinda"),
+            (r"(?i)lonely", "kubera wenyine"),
+            (r"(?i)loneliness", "kwiyumva wenyine"),
+            (r"(?i)hopeless", "kwiyumva nta hope"),
+            (r"(?i)hopelessness", "kwiyumva nta hope"),
+            (r"(?i)help", "ubufasha"),
+            (r"(?i)support", "ubufasha"),
+            (r"(?i)feeling", "kwiyumva"),
+            (r"(?i)feelings", "imyumvire"),
+            (r"(?i)emotion", "imyumvire"),
+            (r"(?i)emotions", "imyumvire"),
+            (r"(?i)counseling", "ubujyanama"),
+            (r"(?i)therapy", "ubuvuzi"),
+            (r"(?i)psychologist", "muganga w'ubuzima bw'ubwoba"),
+            (r"(?i)psychiatrist", "muganga w'ubuzima bw'ubwoba"),
+            (r"(?i)counselor", "umujyanama"),
+            (r"(?i)professional", "umuhanga"),
+            (r"(?i)session", "isaha"),
+            (r"(?i)appointment", "gahunda"),
+            (r"(?i)emergency", "ibyago byihutirwa"),
+            (r"(?i)urgent", "byihutirwa"),
+            (r"(?i)crisis", "ibyago"),
+            (r"(?i)hospital", "ivuriro"),
+            (r"(?i)doctor", "muganga"),
+            (r"(?i)patient", "umuvurwa"),
+            (r"(?i)treatment", "ubuvuzi"),
+            (r"(?i)medication", "imiti"),
+            (r"(?i)medicine", "imiti"),
+            (r"(?i)sleep", "guhaguruka"),
+            (r"(?i)insomnia", "kutagira amahoro mu cyaro"),
+            (r"(?i)nightmare", "inzara"),
+            (r"(?i)pain", "ububabare"),
+            (r"(?i)hurt", "guhumeka"),
+            (r"(?i)worry", "kwitwara"),
+            (r"(?i)concern", "kwitwara"),
+            (r"(?i)problem", "ikibazo"),
+            (r"(?i)issue", "ikibazo"),
+            (r"(?i)difficulty", "ingorane"),
+            (r"(?i)challenge", "ingorane"),
+            (r"(?i)better", "byiza"),
+            (r"(?i)worse", "bibi"),
+            (r"(?i)improve", "gukemura"),
+            (r"(?i)recovery", "gukira"),
+            (r"(?i)healing", "gukira"),
+            (r"(?i)well-being", "ubuzima bwiza"),
+            (r"(?i)wellbeing", "ubuzima bwiza"),
+            (r"(?i)health", "ubuzima"),
+            (r"(?i)mind", "ubwonko"),
+            (r"(?i)brain", "ubwonko"),
+            (r"(?i)thought", "igitekerezo"),
+            (r"(?i)thoughts", "imitekerezo"),
+            (r"(?i)thinking", "gukeka"),
+            (r"(?i)memory", "kwibuka"),
+            (r"(?i)remember", "kwibuka"),
+            (r"(?i)forget", "kwibagirwa"),
+            (r"(?i)family", "umuryango"),
+            (r"(?i)friend", "inshuti"),
+            (r"(?i)friends", "inshuti"),
+            (r"(?i)relationship", "ukwiyunga"),
+            (r"(?i)work", "akazi"),
+            (r"(?i)job", "akazi"),
+            (r"(?i)school", "ishuri"),
+            (r"(?i)study", "kwiga"),
+            (r"(?i)learn", "kwiga"),
+            (r"(?i)today", "uyu munsi"),
+            (r"(?i)tomorrow", "ejo hazaza"),
+            (r"(?i)yesterday", "ejo hashize"),
+            (r"(?i)now", "ubu"),
+            (r"(?i)here", "hano"),
+            (r"(?i)there", "aho"),
+            (r"(?i)where", "he"),
+            (r"(?i)when", "ryari"),
+            (r"(?i)how", "ni gute"),
+            (r"(?i)what", "iki"),
+            (r"(?i)why", "kubera iki"),
+            (r"(?i)who", "nde"),
+            (r"(?i)yes", "yego"),
+            (r"(?i)no", "oya"),
+            (r"(?i)thank you", "murakoze"),
+            (r"(?i)thanks", "murakoze"),
+            (r"(?i)please", "murakoze"),
+            (r"(?i)sorry", "ndamukanya"),
+            (r"(?i)hello", "muraho"),
+            (r"(?i)hi", "muraho"),
+            (r"(?i)goodbye", "murabeho"),
+            (r"(?i)good morning", "mwaramutse"),
+            (r"(?i)good afternoon", "mwiriwe"),
+            (r"(?i)good evening", "mwiriwe"),
+            (r"(?i)good night", "murabeho"),
+            (r"(?i)i am", "ndi"),
+            (r"(?i)i'm", "ndi"),
+            (r"(?i)i have", "mfite"),
+            (r"(?i)i can", "ndashobora"),
+            (r"(?i)i will", "nzajya"),
+            (r"(?i)i would", "nzajya"),
+            (r"(?i)i need", "nkeneye"),
+            (r"(?i)i want", "nshaka"),
+            (r"(?i)i feel", "nkwiyumva"),
+            (r"(?i)how are you", "muraho"),
+            (r"(?i)how do you", "ni gute"),
+            (r"(?i)can you", "murashobora"),
+            (r"(?i)could you", "murashobora"),
+            (r"(?i)would you", "murashobora"),
+            (r"(?i)should i", "ni ngomba"),
+            (r"(?i)must i", "ni ngomba"),
+            (r"(?i)contact", "guhamagara"),
+            (r"(?i)call", "guhamagara"),
+            (r"(?i)phone", "telefone"),
+            (r"(?i)number", "nimero"),
+            (r"(?i)address", "aho uri"),
+            (r"(?i)location", "aho uri"),
+            (r"(?i)district", "akarere"),
+            (r"(?i)province", "intara"),
+            (r"(?i)city", "umujyi"),
+            (r"(?i)town", "umujyi"),
+            (r"(?i)village", "umudugudu"),
+            (r"(?i)rwandan", "w'u Rwanda"),
+            (r"(?i)rwanda", "Rwanda"),
+            (r"(?i)kigali", "Kigali"),
+            (r"(?i)available", "birashoboka"),
+            (r"(?i)available now", "birashoboka ubu"),
+            (r"(?i)immediate", "bwihuse"),
+            (r"(?i)immediately", "bwihuse"),
+            (r"(?i)soon", "vuba"),
+            (r"(?i)later", "nyuma"),
+            (r"(?i)later today", "nyuma uyu munsi"),
+            (r"(?i)tomorrow", "ejo hazaza"),
+            (r"(?i)next week", "icyumweru gikurikira"),
+            (r"(?i)next month", "ukwezi gukurikira"),
+            (r"(?i)schedule", "gahunda"),
+            (r"(?i)book", "kwiyandikisha"),
+            (r"(?i)booking", "kwiyandikisha"),
+            (r"(?i)appointment", "gahunda"),
+            (r"(?i)meeting", "inama"),
+            (r"(?i)consultation", "ubujyanama"),
+            (r"(?i)free", "gratis"),
+            (r"(?i)cost", "igiciro"),
+            (r"(?i)price", "igiciro"),
+            (r"(?i)fee", "igiciro"),
+            (r"(?i)payment", "kwishyura"),
+            (r"(?i)pay", "kwishyura"),
+            (r"(?i)money", "amafaranga"),
+            (r"(?i)currency", "amafaranga"),
+            (r"(?i)rwf", "amafaranga y'u Rwanda"),
+            (r"(?i)rwandan franc", "amafaranga y'u Rwanda"),
+            (r"(?i)hour", "isaha"),
+            (r"(?i)hours", "amasaha"),
+            (r"(?i)minute", "umunota"),
+            (r"(?i)minutes", "iminota"),
+            (r"(?i)day", "umunsi"),
+            (r"(?i)days", "iminsi"),
+            (r"(?i)week", "icyumweru"),
+            (r"(?i)weeks", "iminsi"),
+            (r"(?i)month", "ukwezi"),
+            (r"(?i)months", "amezi"),
+            (r"(?i)year", "umwaka"),
+            (r"(?i)years", "imyaka"),
+            (r"(?i)age", "imyaka"),
+            (r"(?i)old", "mukuru"),
+            (r"(?i)young", "muto"),
+            (r"(?i)child", "umwana"),
+            (r"(?i)children", "abana"),
+            (r"(?i)teenager", "umukobwa cyangwa umuhungu"),
+            (r"(?i)teen", "umukobwa cyangwa umuhungu"),
+            (r"(?i)adult", "umukuru"),
+            (r"(?i)adults", "abakuru"),
+            (r"(?i)elderly", "abakuru"),
+            (r"(?i)senior", "umukuru"),
+            (r"(?i)man", "umugabo"),
+            (r"(?i)men", "abagabo"),
+            (r"(?i)woman", "umugore"),
+            (r"(?i)women", "abagore"),
+            (r"(?i)boy", "umuhungu"),
+            (r"(?i)boys", "abahungu"),
+            (r"(?i)girl", "umukobwa"),
+            (r"(?i)girls", "abakobwa"),
+            (r"(?i)person", "umuntu"),
+            (r"(?i)people", "abantu"),
+            (r"(?i)someone", "umuntu"),
+            (r"(?i)anyone", "umuntu"),
+            (r"(?i)everyone", "abantu bose"),
+            (r"(?i)everybody", "abantu bose"),
+            (r"(?i)nobody", "nta muntu"),
+            (r"(?i)no one", "nta muntu"),
+            (r"(?i)someone else", "undi muntu"),
+            (r"(?i)other", "undi"),
+            (r"(?i)others", "abandi"),
+            (r"(?i)another", "undi"),
+            (r"(?i)different", "bidatanye"),
+            (r"(?i)same", "kimwe"),
+            (r"(?i)similar", "bifitanye"),
+            (r"(?i)like", "nk'"),
+            (r"(?i)unlike", "nta kintu"),
+            (r"(?i)different from", "bidatanye na"),
+            (r"(?i)same as", "kimwe na"),
+            (r"(?i)similar to", "bifitanye na"),
+            (r"(?i)like this", "nk'ibi"),
+            (r"(?i)like that", "nk'aho"),
+            (r"(?i)this way", "nk'ubu"),
+            (r"(?i)that way", "nk'aho"),
+            (r"(?i)here", "hano"),
+            (r"(?i)there", "aho"),
+            (r"(?i)where", "he"),
+            (r"(?i)when", "ryari"),
+            (r"(?i)how", "ni gute"),
+            (r"(?i)what", "iki"),
+            (r"(?i)why", "kubera iki"),
+            (r"(?i)who", "nde"),
+            (r"(?i)which", "iki"),
+            (r"(?i)whose", "wa nde"),
+            (r"(?i)whom", "nde"),
+            
+            # Common phrases that get mistranslated
+            (r"(?i)pour\s+", ""),  # Remove French "pour"
+            (r"(?i)avec\s+", ""),  # Remove French "avec"
+            (r"(?i)sans\s+", ""),  # Remove French "sans"
+            (r"(?i)dans\s+", ""),  # Remove French "dans"
+            (r"(?i)sur\s+", ""),  # Remove French "sur"
+            (r"(?i)car\s+", ""),  # Remove French "car"
+            (r"(?i)donc\s+", ""),  # Remove French "donc"
+            (r"(?i)mais\s+", ""),  # Remove French "mais"
             (r"(?i)ku bihano[,\s]*", ""),
             (r"(?i)komeza amajwi make ariko akunze", ""),
+            
+            # Fix common translation artifacts
+            (r"\bje\s+suis\b", ""),  # Remove French "je suis"
+            (r"\bje\s+vais\b", ""),  # Remove French "je vais"
+            (r"\btrès\s+bien\b", ""),  # Remove French "très bien"
+            (r"\bcomment\s+allez-vous\b", ""),  # Remove French "comment allez-vous"
+            (r"\bça\s+va\b", ""),  # Remove French "ça va"
         ]
 
     def detect_language(self, text: str) -> str:
@@ -288,28 +530,69 @@ class TranslationService:
     def normalize_kinyarwanda(self, text: str) -> str:
         """
         Post-process Kinyarwanda to remove mixed-language fragments and enforce
-        consistent, professional terminology using a small domain glossary.
+        consistent, professional terminology using a comprehensive domain glossary.
         """
         if not text:
             return text
         
         normalized = text
+        
+        # First, apply glossary replacements (more specific patterns first)
+        # Sort by pattern length (longer first) to avoid partial replacements
+        sorted_glossary = sorted(self.rw_glossary, key=lambda x: len(x[0]), reverse=True)
+        for pat, repl in sorted_glossary:
+            normalized = re.sub(pat, repl, normalized, flags=re.IGNORECASE)
+
         # Remove common French connective phrases that sometimes leak in
         french_leak_patterns = [
-            r"(?i)ligne d'assistance en santé mentale",
-            r"(?i)pour|avec|sans|dans|sur|entre|car|donc|mais|ou",
+            r"\b(pour|avec|sans|dans|sur|entre|car|donc|mais|ou)\s+",
+            r"\b(je|tu|il|elle|nous|vous|ils|elles)\s+(suis|es|est|sommes|êtes|sont)\s+",
+            r"\b(très|trop|beaucoup|peu|plus|moins)\s+",
+            r"\b(comment|pourquoi|quand|où|qui|quoi)\s+",
+            r"\b(ça|ce|ces|ceux|cette|cet)\s+",
+            r"\b(bien|mal|bon|mauvais|meilleur|pire)\s+",
         ]
         for pat in french_leak_patterns:
-            normalized = re.sub(pat, "", normalized)
+            normalized = re.sub(pat, "", normalized, flags=re.IGNORECASE)
 
-        # Apply glossary replacements
-        for pat, repl in self.rw_glossary:
-            normalized = re.sub(pat, repl, normalized)
+        # Remove English phrases that leak in
+        english_leak_patterns = [
+            r"\b(hello|hi|hey|thank you|thanks|please|sorry)\b",
+            r"\b(i am|i'm|i have|i can|i will|i would)\b",
+            r"\b(how are you|what is|where is|when is)\b",
+        ]
+        for pat in english_leak_patterns:
+            normalized = re.sub(pat, "", normalized, flags=re.IGNORECASE)
+
+        # Remove Kiswahili phrases that leak in
+        kiswahili_leak_patterns = [
+            r"\b(hujambo|asante|karibu|pole|sijambo)\b",
+            r"\b(mimi|wewe|yeye|sisi|nyinyi|wao)\b",
+        ]
+        for pat in kiswahili_leak_patterns:
+            normalized = re.sub(pat, "", normalized, flags=re.IGNORECASE)
+
+        # Fix common Kinyarwanda grammar issues
+        kinyarwanda_fixes = [
+            (r'\b(umutima|umutima)\s+(umutima|umutima)\b', 'umutima'),  # Remove duplicate "umutima"
+            (r'\b(ubuzima|ubuzima)\s+(ubuzima|ubuzima)\b', 'ubuzima'),  # Remove duplicate "ubuzima"
+            (r'\b(murakoze|murakoze)\s+(murakoze|murakoze)\b', 'murakoze'),  # Remove duplicate "murakoze"
+            (r'\b(ndumva|ndumva)\s+(ndumva|ndumva)\b', 'ndumva'),  # Remove duplicate "ndumva"
+        ]
+        for pattern, replacement in kinyarwanda_fixes:
+            normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
 
         # Trim repetitive spaces and stray punctuation
         normalized = re.sub(r"\s+", " ", normalized).strip()
         normalized = re.sub(r"\s+,", ",", normalized)
         normalized = re.sub(r"\s+\.", ".", normalized)
+        normalized = re.sub(r"\s+\?", "?", normalized)
+        normalized = re.sub(r"\s+!", "!", normalized)
+        
+        # Remove leading/trailing punctuation artifacts
+        normalized = re.sub(r"^[,\s\.!?]+", "", normalized)
+        normalized = re.sub(r"[,\s\.!?]+$", "", normalized)
+        
         return normalized
     
     def normalize_french(self, text: str) -> str:

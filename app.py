@@ -1749,17 +1749,17 @@ Directives professionnelles:
 
 Rappelez-vous: Vous êtes un système professionnel de soutien en santé mentale conçu pour fournir une assistance immédiate et culturellement appropriée tout en connectant les utilisateurs aux soins professionnels quand nécessaire.""",
 
-        'rw': """Uri AIMHSA, umufasha w'ubuzima bw'ubwoba bw'u Rwanda w'ubuhanga.
+        'rw': """Uri AIMHSA, umufasha w'ubuzima bw'ubwoba bw'ubuhanga wo mu Rwanda.
 
 Amabwiriza y'ubuhanga:
 - Ube umuntu w'umutima mwiza, w'umutima mwiza, kandi w'umutima mwiza
-- Tanga amakuru yashyizweho ku bik
-- Ku bihano, tanga umutwe wa Ligne d'assistance en santé mentale y'u Rwanda: 105
-- Komeza amajwi make ariko akunze
+- Tanga amakuru yashyizweho ku bikoresho byatanzwe igihe cyose bihari
+- Ku bihano, vuga umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda: 105
+- Komeza amajwi make ariko akunze kandi akwiye
 - Koresha icyerekezo cyatanzwe kugira ngo utange amakuru y'ukuri kandi yihariye
-- VUGURA BURI GIHE mu Kinyarwanda - NTUVUGE mu ndimi zindi
+- VUGURA BURI GIHE mu Kinyarwanda gusa - NTUVUGE mu ndimi zindi
 - Koresha amagambo y'ukuri mu Kinyarwanda gusa
-- NTUVUGE mu ndimi zindi cyangwa utangire amagambo y'icyongereza
+- NTUVUGE mu ndimi zindi cyangwa utangire amagambo y'icyongereza cyangwa Igifaransa cyangwa Igiswahili
 - Komeza uko uvuga mu Kinyarwanda gusa, ube w'ubuhanga
 
 Wibuke: Uri hano kugira ngo ushyigikire, si kugira ngo usimbure ubuvuzi bw'ubuzima bw'ubwoba bw'ubuhanga. Vugura mu Kinyarwanda gusa, ube w'ubuhanga.""",
@@ -2135,7 +2135,7 @@ CONTEXT:
             elif target_language == 'fr':
                 answer = f"Bonjour! Je suis AIMHSA, votre compagnon de santé mentale pour le Rwanda. Comment puis-je vous aider aujourd'hui? Pour une aide immédiate, contactez la ligne d'assistance en santé mentale au 105."
             elif target_language == 'rw':
-                answer = f"Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'u Rwanda. Nakora iki ngo ngufashe uyu munsi? Niba ukeneye ubufasha bwihuse, hamagara Ligne d'assistance en santé mentale ku 105."
+                answer = f"Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'ubuhanga wo mu Rwanda. Nakora iki ngo ngufashe uyu munsi? Niba ukeneye ubufasha bwihuse, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe ku 105."
         if not isinstance(answer, str) or not answer.strip():
             app.logger.warning("Empty answer received, using language-specific fallback")
             
@@ -2143,13 +2143,33 @@ CONTEXT:
             fallback_responses = {
                 'en': "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
                 'fr': "Je suis là pour vous aider. Pourriez-vous reformuler votre question? En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
-                'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara Ligne d'assistance en santé mentale y'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
+                'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
                 'sw': "Niko hapa kusaidia. Tafadhali rudia swali lako? Kwa dharura, piga simu ya Ligne d'assistance en santé mentale ya Rwanda 105 au CARAES Ndera Hospital +250 788 305 703."
             }
             
             answer = fallback_responses.get(target_language, fallback_responses['en'])
         else:
             app.logger.info(f"Got valid answer: {answer[:50]}...")
+            
+            # Translate answer to target language if not English
+            # This ensures accurate translation even if LLM generated in wrong language
+            if target_language != 'en':
+                try:
+                    # Check if answer is already in target language (simple heuristic)
+                    # If answer contains common English words, translate it
+                    english_indicators = ['the ', 'and ', 'is ', 'are ', 'was ', 'were ', 'have ', 'has ', 
+                                         'I ', 'you ', 'he ', 'she ', 'we ', 'they ', 'this ', 'that ']
+                    needs_translation = any(indicator in answer.lower()[:100] for indicator in english_indicators)
+                    
+                    if needs_translation:
+                        app.logger.info(f"Translating answer to {target_language}")
+                        translated_answer = translation_service.translate_text(answer, target_language)
+                        if translated_answer and translated_answer.strip():
+                            answer = translated_answer
+                            app.logger.info(f"Translation successful: {answer[:50]}...")
+                except Exception as trans_error:
+                    app.logger.warning(f"Translation failed, using original answer: {trans_error}")
+                    # Continue with original answer if translation fails
                 
     except Exception as e:
         app.logger.error(f"Failed to get chat response with {CHAT_MODEL}: {e}")
@@ -2162,7 +2182,7 @@ CONTEXT:
         fallback_responses = {
             'en': "I'm sorry, I'm having trouble accessing my AI model right now. However, I can still help you with mental health resources in Rwanda. Please contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703 for immediate support. You can also try refreshing the page or contacting support if this issue persists.",
             'fr': "Je suis désolé, j'ai des difficultés à accéder à mon modèle IA en ce moment. Cependant, je peux toujours vous aider avec les ressources de santé mentale au Rwanda. Veuillez contacter la ligne d'assistance en santé mentale au 105 ou l'hôpital CARAES Ndera au +250 788 305 703 pour un soutien immédiat. Vous pouvez aussi essayer de rafraîchir la page ou contacter le support si ce problème persiste.",
-            'rw': "Ndamukanya, nfite ibibazo bwo kugera ku modere yanjye ya AI ubu. Icyakora, narakomeje gufasha ku bikoresho by'ubuzima bw'ubwoba mu Rwanda. Murakoze hamagara Ligne d'assistance en santé mentale ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703 kugira ngo mubone ubufasha buhagije. Murashobora kandi kugerageza gusubiramo urupapuro cyangwa guhamagara ubufasha niba iki kibazo gikomeje.",
+            'rw': "Ndamukanya, nfite ibibazo bwo kugera ku modere yanjye ya AI ubu. Icyakora, narakomeje gufasha ku bikoresho by'ubuzima bw'ubwoba mu Rwanda. Murakoze hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703 kugira ngo mubone ubufasha buhagije. Murashobora kandi kugerageza gusubiramo urupapuro cyangwa guhamagara ubufasha niba iki kibazo gikomeje.",
             'sw': "Samahani, nina shida ya kufikia moduli yangu ya AI sasa. Hata hivyo, bado naweza kukusaidia na rasilimali za afya ya akili Rwanda. Tafadhali piga simu ya Ligne d'assistance en santé mentale 105 au CARAES Ndera Hospital +250 788 305 703 kwa msaada wa haraka. Unaweza pia kujaribu kurudisha ukurasa au kuwasiliana na msaada iki tatizo likaendelea."
         }
         
@@ -4663,23 +4683,35 @@ def get_all_booked_users():
                 ORDER BY created_ts DESC
             """, (user_account, professional_id)).fetchall()
             
-            # Get conversation history
+            # Get conversation history (owner_key format is "acct:{username}" or "ip:{ip}")
+            owner_key = f"acct:{user_account}"
             conversations = conn.execute("""
                 SELECT conv_id, preview, ts
                 FROM conversations 
-                WHERE owner_key = ?
+                WHERE owner_key = ? OR owner_key LIKE ?
                 ORDER BY ts DESC
                 LIMIT 5
-            """, (user_account,)).fetchall()
+            """, (owner_key, f"{owner_key}%")).fetchall()
             
-            # Get risk assessment history
-            risk_assessments = conn.execute("""
-                SELECT risk_level, risk_score, detected_indicators, created_ts
-                FROM risk_assessments 
-                WHERE user_account = ?
-                ORDER BY created_ts DESC
-                LIMIT 10
-            """, (user_account,)).fetchall()
+            # Get risk assessment history (risk_assessments uses conv_id, not user_account)
+            # Get conv_ids from user's bookings first
+            user_conv_ids = conn.execute("""
+                SELECT DISTINCT conv_id
+                FROM automated_bookings
+                WHERE user_account = ? AND professional_id = ?
+            """, (user_account, professional_id)).fetchall()
+            conv_id_list = [row[0] for row in user_conv_ids]
+            
+            risk_assessments = []
+            if conv_id_list:
+                placeholders = ','.join(['?'] * len(conv_id_list))
+                risk_assessments = conn.execute(f"""
+                    SELECT risk_level, risk_score, detected_indicators, assessment_timestamp
+                    FROM risk_assessments 
+                    WHERE conv_id IN ({placeholders})
+                    ORDER BY assessment_timestamp DESC
+                    LIMIT 10
+                """, conv_id_list).fetchall()
             
             user_data = {
                 'userAccount': user[0],
@@ -4726,12 +4758,24 @@ def get_all_booked_users():
             
             # Add risk assessment details
             for risk in risk_assessments:
-                user_data['riskAssessments'].append({
-                    'riskLevel': risk[0],
-                    'riskScore': risk[1],
-                    'detectedIndicators': risk[2],
-                    'timestamp': risk[3]
-                })
+                try:
+                    # Parse detected_indicators if it's JSON
+                    indicators = risk[2]
+                    if isinstance(indicators, str):
+                        try:
+                            indicators = json.loads(indicators)
+                        except:
+                            pass
+                    
+                    user_data['riskAssessments'].append({
+                        'riskLevel': risk[0] or 'low',
+                        'riskScore': float(risk[1]) if risk[1] is not None else 0.0,
+                        'detectedIndicators': indicators if indicators else [],
+                        'timestamp': risk[3] if risk[3] is not None else 0
+                    })
+                except Exception as e:
+                    app.logger.warning(f"Error processing risk assessment: {e}")
+                    continue
             
             users_data.append(user_data)
         
