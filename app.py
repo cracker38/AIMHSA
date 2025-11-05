@@ -4791,6 +4791,75 @@ def get_all_booked_users():
         app.logger.error(f"Error getting booked users: {e}")
         return jsonify({'error': 'Failed to get booked users'}), 500
 
+@app.get("/professional/patient-history/<username>")
+def get_patient_history(username):
+    """Get all conversation history for a specific patient"""
+    try:
+        professional_id = request.headers.get('X-Professional-ID')
+        if not professional_id:
+            return jsonify({'error': 'Professional ID required'}), 400
+        
+        # Verify this professional has sessions with this user
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            # Check if professional has any bookings with this user
+            booking_check = conn.execute("""
+                SELECT COUNT(*) FROM automated_bookings 
+                WHERE professional_id = ? AND user_account = ?
+            """, (professional_id, username)).fetchone()[0]
+            
+            if booking_check == 0:
+                return jsonify({'error': 'No sessions found with this patient'}), 404
+            
+            # Get all conversations for this user (owner_key = 'acct:<username>')
+            owner_key = f"acct:{username}"
+            conversations = conn.execute("""
+                SELECT conv_id, preview, ts 
+                FROM conversations 
+                WHERE owner_key = ? 
+                ORDER BY ts DESC
+            """, (owner_key,)).fetchall()
+            
+            # For each conversation, get all messages
+            conversation_history = []
+            for conv_id, preview, conv_ts in conversations:
+                messages = conn.execute("""
+                    SELECT role, content, ts 
+                    FROM messages 
+                    WHERE conv_id = ? 
+                    ORDER BY ts ASC
+                """, (conv_id,)).fetchall()
+                
+                conversation_history.append({
+                    'conversation_id': conv_id,
+                    'preview': preview or 'New chat',
+                    'timestamp': conv_ts,
+                    'message_count': len(messages),
+                    'messages': [
+                        {
+                            'role': msg[0],
+                            'content': msg[1],
+                            'timestamp': msg[2]
+                        }
+                        for msg in messages
+                    ]
+                })
+            
+            return jsonify({
+                'username': username,
+                'total_conversations': len(conversation_history),
+                'conversations': conversation_history
+            })
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error getting patient history: {e}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': 'Failed to get patient history'}), 500
+
 @app.post("/professional/sessions/<booking_id>/accept")
 def accept_session(booking_id):
     """Accept a session"""
