@@ -990,8 +990,118 @@
 
     window.viewPatientHistory = function(username) {
         console.log('📋 Viewing patient history:', username);
-        Swal.fire('Patient History', `Patient history for ${username} coming soon`, 'info');
+        
+        // Show loading state
+        Swal.fire({
+            title: 'Loading Patient History',
+            html: 'Please wait while we fetch the conversation history...',
+            allowOutsideClick: false,
+            didOpen: () => {
+                Swal.showLoading();
+            }
+        });
+        
+        // Fetch patient history
+        apiFetch(`/professional/patient-history/${encodeURIComponent(username)}`)
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to load patient history');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('📋 Patient history data:', data);
+                
+                // Format conversations for display
+                let conversationHtml = '';
+                if (data.conversations && data.conversations.length > 0) {
+                    data.conversations.forEach((conv, index) => {
+                        const convDate = new Date(conv.timestamp * 1000).toLocaleString();
+                        const messageCount = conv.message_count || conv.messages?.length || 0;
+                        
+                        conversationHtml += `
+                            <div class="conversation-item" style="margin-bottom: 20px; padding: 15px; border: 1px solid #e0e0e0; border-radius: 8px; background: #f9f9f9;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <h4 style="margin: 0; color: #2c5aa0; font-size: 16px;">
+                                        <i class="fas fa-comments mr-2"></i>${conv.preview || 'Conversation'}
+                                    </h4>
+                                    <div style="font-size: 12px; color: #666;">
+                                        <i class="fas fa-calendar mr-1"></i>${convDate}
+                                        <span style="margin-left: 10px;">
+                                            <i class="fas fa-comment-dots mr-1"></i>${messageCount} messages
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="messages-container" style="max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 4px;">
+                                    ${conv.messages && conv.messages.length > 0 ? conv.messages.map((msg, msgIndex) => {
+                                        const msgDate = new Date(msg.timestamp * 1000).toLocaleTimeString();
+                                        const isUser = msg.role === 'user';
+                                        return `
+                                            <div style="margin-bottom: 12px; padding: 10px; border-radius: 6px; ${isUser ? 'background: #e3f2fd; margin-left: 20px;' : 'background: #f5f5f5; margin-right: 20px;'}">
+                                                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                                    <strong style="color: ${isUser ? '#1976d2' : '#666'};">
+                                                        ${isUser ? '<i class="fas fa-user mr-1"></i>Patient' : '<i class="fas fa-robot mr-1"></i>AIMHSA'}
+                                                    </strong>
+                                                    <span style="font-size: 11px; color: #999;">${msgDate}</span>
+                                                </div>
+                                                <div style="color: #333; white-space: pre-wrap; word-wrap: break-word;">${escapeHtml(msg.content)}</div>
+                                            </div>
+                                        `;
+                                    }).join('') : '<p style="color: #999; font-style: italic;">No messages in this conversation</p>'}
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    conversationHtml = `
+                        <div style="text-align: center; padding: 40px; color: #999;">
+                            <i class="fas fa-comments" style="font-size: 48px; margin-bottom: 15px; opacity: 0.5;"></i>
+                            <p>No conversation history found for this patient.</p>
+                        </div>
+                    `;
+                }
+                
+                // Show the modal with conversation history
+                Swal.fire({
+                    title: `Patient History: ${username}`,
+                    html: `
+                        <div style="text-align: left; max-height: 70vh; overflow-y: auto;">
+                            <div style="margin-bottom: 15px; padding: 10px; background: #e3f2fd; border-radius: 6px;">
+                                <strong><i class="fas fa-info-circle mr-2"></i>Total Conversations:</strong> ${data.total_conversations || 0}
+                            </div>
+                            ${conversationHtml}
+                        </div>
+                    `,
+                    width: '900px',
+                    showCloseButton: true,
+                    showConfirmButton: true,
+                    confirmButtonText: 'Close',
+                    confirmButtonColor: '#2c5aa0',
+                    customClass: {
+                        popup: 'patient-history-modal'
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('❌ Error loading patient history:', error);
+                Swal.fire({
+                    title: 'Error',
+                    text: error.message || 'Failed to load patient history',
+                    icon: 'error',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#dc3545'
+                });
+            });
     };
+    
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 
     window.addNewSession = function() {
         console.log('➕ Adding new session');
