@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from werkzeug.utils import secure_filename
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from translation_service import translation_service
 from sms_service import initialize_sms_service, get_sms_service
 
@@ -126,6 +126,7 @@ SENT_EMBED_MODEL = current_config.SENT_EMBED_MODEL
 # lazy-loaded SentenceTransformer instance (only used when SENT_EMBED_MODEL points to a sentence-transformers model)
 SENT_MODEL = None
 USE_SENT_TRANSFORMERS = SENT_EMBED_MODEL.startswith("sentence-transformers/")
+LANGUAGE_CONFIDENCE_THRESHOLD = 0.65
 
 # --- Email Configuration ---
 SMTP_SERVER = current_config.SMTP_SERVER
@@ -1784,87 +1785,53 @@ Kumbuka: Wewe ni mfumo wa kitaaluma wa msaada wa afya ya akili ulioundwa kutoa m
     
     return prompts.get(target_language, prompts['en'])
 
-def determine_target_language(current_query: str, server_history: List[Dict], max_history_samples: int = 5) -> str:
+def determine_target_language(current_query: str, server_history: List[Dict], max_history_samples: int = 5) -> Dict[str, Any]:
     """
-    Determine the target reply language with improved accuracy
-    - Prioritizes current query language detection
-    - Uses conversation history for consistency
-    - Returns one of: 'en', 'fr', 'rw', 'sw'
+    Determine the target reply language with confidence scoring.
+    Returns a dict: { language, confidence, details }
     """
-    app.logger.info(f"Determining language for query: '{current_query[:50]}...'")
+    app.logger.info(f"Determining language for query: '{(current_query or '')[:50]}...'")
     
-    # First priority: Current query language detection
-    try:
-        current_lang = translation_service.detect_language(current_query or "")
-        app.logger.info(f"Detected current query language: {current_lang}")
-        
-        # If current query language is detected with high confidence, use it immediately
-        if current_lang and current_lang != 'en':
-            app.logger.info(f"Using non-English current query language: {current_lang}")
-            return current_lang
-        elif current_lang == 'en':
-            # Check if this might be a false positive for English
-            # Look for non-English patterns in the query
-            non_english_indicators = [
-                'muraho', 'murakoze', 'ndabishimye',  # Kinyarwanda
-                'bonjour', 'merci', 'je suis',  # French  
-                'hujambo', 'asante', 'nina'  # Kiswahili
-            ]
-            
-            query_lower = current_query.lower()
-            for indicator in non_english_indicators:
-                if indicator in query_lower:
-                    # Re-detect with more aggressive pattern matching
-                    pattern_lang = translation_service._detect_by_patterns(current_query)
-                    if pattern_lang and pattern_lang != 'en':
-                        app.logger.info(f"Pattern override detected: {pattern_lang}")
-                        return pattern_lang
-    except Exception as e:
-        app.logger.warning(f"Language detection error for current query: {e}")
-        current_lang = "en"
-
-    # Second priority: Check recent conversation history for consistency
+    detection = translation_service.detect_language_confidence(current_query or "")
+    combined_scores = {lang: 0.0 for lang in translation_service.supported_languages}
+    combined_scores.update({k: v * 0.7 for k, v in detection.get("scores", {}).items() if k in combined_scores})
+    
+    history_votes: Dict[str, float] = {lang: 0.0 for lang in translation_service.supported_languages}
     recent_user_texts: List[str] = []
     for entry in reversed(server_history):
-        try:
-            if entry.get("role") == "user":
-                text = (entry.get("content") or "").strip()
-                if text:
-                    recent_user_texts.append(text)
-        except Exception:
-            continue
         if len(recent_user_texts) >= max_history_samples:
             break
-
-    # Analyze recent messages for language consistency
+        if entry.get("role") != "user":
+            continue
+        text = (entry.get("content") or "").strip()
+        if text:
+            recent_user_texts.append(text)
+    
     if recent_user_texts:
-        language_votes: Dict[str, int] = {}
-        
+        per_sample_weight = 0.3 / len(recent_user_texts)
         for text in recent_user_texts:
             try:
-                detected_lang = translation_service.detect_language(text)
-                if detected_lang:
-                    language_votes[detected_lang] = language_votes.get(detected_lang, 0) + 1
+                hist_detection = translation_service.detect_language_confidence(text)
             except Exception:
                 continue
-        
-        # Find the most common language in recent history
-        if language_votes:
-            most_common_lang = max(language_votes.items(), key=lambda kv: kv[1])[0]
-            app.logger.info(f"Most common language in history: {most_common_lang} (votes: {language_votes})")
-            
-            # If current query is English but history shows another language, 
-            # and current query is short or ambiguous, prefer history language
-            if (current_lang == 'en' and 
-                most_common_lang != 'en' and 
-                len(current_query.strip()) < 30):
-                app.logger.info(f"Using history language {most_common_lang} due to short/ambiguous current query")
-                return most_common_lang
-
-    # Final fallback: Use current query language or default to English
-    final_lang = current_lang if current_lang else "en"
-    app.logger.info(f"Final language determination: {final_lang}")
-    return final_lang
+            lang = hist_detection.get("language", "en")
+            conf = hist_detection.get("confidence", 0.0)
+            history_votes[lang] += conf * per_sample_weight
+            combined_scores[lang] = combined_scores.get(lang, 0.0) + conf * per_sample_weight
+    
+    best_language = max(combined_scores, key=combined_scores.get)
+    best_score = min(1.0, round(combined_scores[best_language], 3))
+    
+    result = {
+        "language": best_language,
+        "confidence": best_score,
+        "details": {
+            "current_detection": detection,
+            "history_votes": history_votes
+        }
+    }
+    app.logger.info(f"Language detection result: {result}")
+    return result
 
 def validate_mental_health_scope(query: str) -> bool:
     """
@@ -2031,8 +1998,27 @@ CONTEXT:
 """
 
     # Determine stable target language from this query and recent history
-    target_language = determine_target_language(query, server_history)
-    app.logger.info(f"Target language determined: {target_language}")
+    target_info = determine_target_language(query, server_history)
+    target_language = target_info.get("language", "en")
+    language_confidence = target_info.get("confidence", 0.0)
+    app.logger.info(f"Target language determined: {target_language} (confidence={language_confidence})")
+
+    if language_confidence < LANGUAGE_CONFIDENCE_THRESHOLD:
+        clarification_message = (
+            "Hello! I want to make sure I reply in the language you prefer. "
+            "Could you please let me know whether you'd like to continue in English, French, Kiswahili, or Kinyarwanda?"
+        )
+        save_message(conv_id, "user", query)
+        save_message(conv_id, "assistant", clarification_message)
+        resp = {
+            "answer": clarification_message,
+            "id": conv_id,
+            "language_clarification_required": True,
+            "language_detection": target_info
+        }
+        if new_conv:
+            resp["new"] = True
+        return jsonify(resp)
     
     # Create language-specific system prompt for direct AI response generation
     system_prompt = create_language_specific_prompt(target_language)
@@ -2194,7 +2180,7 @@ CONTEXT:
     save_message(conv_id, "assistant", answer)
 
     sources = [{"source": m["source"], "chunk": m["chunk"]} for (_, m) in top]
-    resp = {"answer": answer, "sources": sources, "id": conv_id}
+    resp = {"answer": answer, "sources": sources, "id": conv_id, "language_detection": target_info}
     
     # Add risk assessment and booking info to response
     resp["risk_assessment"] = {

@@ -8,7 +8,7 @@ Features:
 - Uses GoogleTranslator from deep_translator for accurate translation
 - Maintains natural tone, accuracy, and clarity in all supported languages
 """
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from langdetect import detect, detect_langs, DetectorFactory
 from deep_translator import GoogleTranslator
 import re
@@ -312,40 +312,114 @@ class TranslationService:
 
     def detect_language(self, text: str) -> str:
         """
-        Professional language detection for multilingual chatbot.
-        Detects language from user input and returns one of: 'en', 'fr', 'sw', 'rw'
-        
-        Uses ensemble method combining pattern matching, multiple detectors,
-        and domain-specific knowledge for maximum accuracy.
+        Backwards-compatible language detection helper.
         """
+        result = self.detect_language_confidence(text)
+        return result["language"]
+
+    def detect_language_confidence(self, text: str) -> Dict[str, Any]:
+        """
+        Advanced language detection returning both language and confidence score.
+        Combines pattern heuristics, multiple detectors, and contextual signals.
+        """
+        scores = {lang: 0.0 for lang in self.supported_languages}
+        reasons: Dict[str, List[str]] = {lang: [] for lang in self.supported_languages}
+        baseline_language = 'en'
+        baseline_confidence = 0.25
+        
         if not text or not text.strip():
-            return 'en'
+            return {
+                "language": baseline_language,
+                "confidence": 0.0,
+                "source": "empty",
+                "scores": scores,
+                "reasons": reasons
+            }
         
-        # Clean the text for better detection
         cleaned_text = re.sub(r'[^\w\s]', '', text.strip().lower())
-        
         if len(cleaned_text) < 2:
-            return 'en'
+            return {
+                "language": baseline_language,
+                "confidence": baseline_confidence,
+                "source": "short_text",
+                "scores": scores,
+                "reasons": reasons
+            }
         
+        def _add_score(lang: str, value: float, reason: str):
+            if lang not in scores:
+                return
+            scores[lang] += value
+            reasons[lang].append(reason)
+        
+        # Pattern heuristics
         try:
-            # Primary detection using pattern matching
             pattern_lang = self._detect_by_patterns(text)
             if pattern_lang:
-                return pattern_lang
-            
-            # Secondary detection using langdetect
-            detected = detect(text)
-            mapped = self._map_code(detected)
-            
-            # Tertiary validation using domain knowledge
-            if mapped in self.supported_languages:
-                return mapped
-            
-            return 'en'
-
+                _add_score(pattern_lang, 0.55, "pattern_match")
         except Exception as e:
-            print(f"Language detection error: {e}")
-            return 'en'
+            print(f"Pattern detection error: {e}")
+        
+        # Strong token heuristics per language
+        text_lower = text.lower()
+        if self._has_strong_kinyarwanda_tokens(text_lower):
+            _add_score('rw', 0.25, "strong_kinyarwanda_tokens")
+        if self._has_strong_french_tokens(text_lower):
+            _add_score('fr', 0.2, "strong_french_tokens")
+        if self._has_strong_kiswahili_tokens(text_lower):
+            _add_score('sw', 0.2, "strong_kiswahili_tokens")
+        if self._is_common_greeting(text):
+            _add_score('en', 0.1, "common_greeting")
+        
+        # langdetect probabilities
+        try:
+            lang_probs = detect_langs(text)
+            for idx, langprob in enumerate(lang_probs[:3]):
+                mapped = self._map_code(langprob.lang)
+                if mapped in scores:
+                    weight = max(0.05, langprob.prob * 0.35)
+                    _add_score(mapped, weight, f"langdetect:{langprob.prob:.2f}")
+                    if idx == 0 and langprob.prob > 0.95:
+                        break
+        except Exception as e:
+            print(f"langdetect error: {e}")
+        
+        # langid fallback
+        if langid:
+            try:
+                lid_lang, lid_prob = langid.classify(text)
+                mapped = self._map_code(lid_lang)
+                if mapped in scores:
+                    weight = lid_prob * 0.25
+                    _add_score(mapped, weight, f"langid:{lid_prob:.2f}")
+            except Exception as e:
+                print(f"langid error: {e}")
+        
+        # pycld3 detector
+        if pycld3:
+            try:
+                prediction = pycld3.get_language(text)
+                if prediction and prediction.is_reliable:
+                    mapped = self._map_code(prediction.language)
+                    if mapped in scores:
+                        weight = min(0.25, prediction.probability * 0.25)
+                        _add_score(mapped, weight, f"pycld3:{prediction.probability:.2f}")
+            except Exception as e:
+                print(f"pycld3 error: {e}")
+        
+        # Ensure baseline score
+        scores[baseline_language] = max(scores[baseline_language], baseline_confidence)
+        
+        best_language = max(scores, key=scores.get)
+        best_score = min(1.0, round(scores[best_language], 3))
+        
+        return {
+            "language": best_language,
+            "confidence": best_score,
+            "source": "ensemble",
+            "scores": scores,
+            "reasons": reasons
+        }
     
     def _detect_by_patterns(self, text: str) -> str:
         """
