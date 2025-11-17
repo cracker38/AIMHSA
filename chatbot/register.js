@@ -16,204 +16,101 @@
     // Elements
     const registerForm = document.getElementById('registerForm');
     const registerBtn = document.getElementById('registerBtn');
-    // CAPTCHA elements
-    const captchaQuestion = document.getElementById('captchaQuestion');
-    const captchaAnswer = document.getElementById('captchaAnswer');
-    const captchaSolution = document.getElementById('captchaSolution');
+    // reCAPTCHA elements
+    const recaptchaContainer = document.getElementById('recaptcha-container');
+    const recaptchaToken = document.getElementById('recaptchaToken');
     const captchaError = document.getElementById('captchaError');
-    const refreshCaptcha = document.getElementById('refreshCaptcha');
     
     // Validation state
     let validationErrors = {};
     let isSubmitting = false;
+    let recaptchaWidgetId = null;
+    let recaptchaSiteKey = '';
     
-    // Advanced CAPTCHA System
-    let captchaStartTime = Date.now();
-    let captchaAttempts = 0;
-    let captchaType = 'math';
-    
-    // Generate Advanced CAPTCHA
-    function generateCaptcha() {
-        captchaStartTime = Date.now();
-        captchaAttempts = 0;
-        
-        // Randomly select CAPTCHA type (70% math, 20% word problem, 10% pattern)
-        const rand = Math.random();
-        if (rand < 0.7) {
-            captchaType = 'math';
-            generateMathCaptcha();
-        } else if (rand < 0.9) {
-            captchaType = 'word';
-            generateWordCaptcha();
-        } else {
-            captchaType = 'pattern';
-            generatePatternCaptcha();
+    // Get reCAPTCHA site key from config or environment
+    async function getRecaptchaSiteKey() {
+        try {
+            // Try to get from config
+            if (window.AIMHSA && window.AIMHSA.Config) {
+                const config = await fetch('/js/config.js');
+                // If config has it, use it
+            }
+            // Try to get from API endpoint
+            const response = await fetch('/api/recaptcha-site-key');
+            if (response.ok) {
+                const data = await response.json();
+                return data.site_key || '';
+            }
+        } catch (e) {
+            console.warn('Could not fetch reCAPTCHA site key from API:', e);
         }
-        
-        captchaAnswer.value = '';
-        captchaError.textContent = '';
-        if (captchaAnswer) captchaAnswer.classList.remove('error');
+        return '';
     }
     
-    // Generate Math CAPTCHA (more complex operations)
-    function generateMathCaptcha() {
-        const operations = [
-            { type: 'add', weight: 30 },
-            { type: 'subtract', weight: 30 },
-            { type: 'multiply', weight: 25 },
-            { type: 'mixed', weight: 15 }
-        ];
-        
-        const rand = Math.random() * 100;
-        let selectedOp = operations[0];
-        let cumulative = 0;
-        for (const op of operations) {
-            cumulative += op.weight;
-            if (rand <= cumulative) {
-                selectedOp = op;
-                break;
+    // Initialize reCAPTCHA
+    window.onRecaptchaLoad = async function() {
+        try {
+            recaptchaSiteKey = await getRecaptchaSiteKey();
+            if (!recaptchaSiteKey) {
+                console.warn('reCAPTCHA site key not configured. Please set RECAPTCHA_SITE_KEY in environment.');
+                if (recaptchaContainer) {
+                    recaptchaContainer.innerHTML = '<p style="color: #999; font-size: 12px;">reCAPTCHA not configured</p>';
+                }
+                return;
+            }
+            
+            if (recaptchaContainer && typeof grecaptcha !== 'undefined') {
+                recaptchaWidgetId = grecaptcha.render(recaptchaContainer, {
+                    'sitekey': recaptchaSiteKey,
+                    'callback': function(token) {
+                        // reCAPTCHA verified successfully
+                        recaptchaToken.value = token;
+                        captchaError.textContent = '';
+                        captchaError.classList.remove('show');
+                    },
+                    'expired-callback': function() {
+                        // Handle expiration
+                        recaptchaToken.value = '';
+                        captchaError.textContent = 'Verification challenge expired. Check the checkbox again.';
+                        captchaError.classList.add('show');
+                    },
+                    'error-callback': function() {
+                        // Handle error
+                        recaptchaToken.value = '';
+                        captchaError.textContent = 'Verification failed. Please try again.';
+                        captchaError.classList.add('show');
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Error initializing reCAPTCHA:', e);
+            if (recaptchaContainer) {
+                recaptchaContainer.innerHTML = '<p style="color: #d32f2f; font-size: 12px;">Error loading reCAPTCHA. Please refresh the page.</p>';
             }
         }
-        
-        let question, solution;
-        
-        if (selectedOp.type === 'add') {
-            const num1 = Math.floor(Math.random() * 15) + 5;
-            const num2 = Math.floor(Math.random() * 15) + 5;
-            question = `${num1} + ${num2}`;
-            solution = num1 + num2;
-        } else if (selectedOp.type === 'subtract') {
-            const num1 = Math.floor(Math.random() * 20) + 10;
-            const num2 = Math.floor(Math.random() * (num1 - 5)) + 1;
-            question = `${num1} - ${num2}`;
-            solution = num1 - num2;
-        } else if (selectedOp.type === 'multiply') {
-            const num1 = Math.floor(Math.random() * 9) + 2;
-            const num2 = Math.floor(Math.random() * 9) + 2;
-            question = `${num1} × ${num2}`;
-            solution = num1 * num2;
-        } else { // mixed
-            const num1 = Math.floor(Math.random() * 10) + 1;
-            const num2 = Math.floor(Math.random() * 10) + 1;
-            const num3 = Math.floor(Math.random() * 10) + 1;
-            question = `${num1} + ${num2} - ${num3}`;
-            solution = num1 + num2 - num3;
-        }
-        
-        captchaQuestion.textContent = question;
-        captchaSolution.value = solution;
-    }
+    };
     
-    // Generate Word Problem CAPTCHA
-    function generateWordCaptcha() {
-        const problems = [
-            { q: "What is 5 + 3?", a: 8 },
-            { q: "What is 10 - 4?", a: 6 },
-            { q: "What is 2 × 4?", a: 8 },
-            { q: "What is 12 + 7?", a: 19 },
-            { q: "What is 15 - 8?", a: 7 },
-            { q: "What is 3 × 5?", a: 15 },
-            { q: "What is 9 + 6?", a: 15 },
-            { q: "What is 20 - 9?", a: 11 },
-            { q: "What is 4 × 3?", a: 12 },
-            { q: "What is 8 + 9?", a: 17 }
-        ];
-        
-        const problem = problems[Math.floor(Math.random() * problems.length)];
-        captchaQuestion.textContent = problem.q;
-        captchaSolution.value = problem.a;
-    }
-    
-    // Generate Pattern CAPTCHA
-    function generatePatternCaptcha() {
-        const patterns = [
-            { q: "2, 4, 6, ?", a: 8 },
-            { q: "5, 10, 15, ?", a: 20 },
-            { q: "3, 6, 9, ?", a: 12 },
-            { q: "1, 3, 5, ?", a: 7 },
-            { q: "10, 20, 30, ?", a: 40 }
-        ];
-        
-        const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-        captchaQuestion.textContent = pattern.q;
-        captchaSolution.value = pattern.a;
-    }
-    
-    // Advanced CAPTCHA Validation
-    function validateCaptcha() {
-        captchaAttempts++;
-        
-        // Check if answered too quickly (bot detection - less than 2 seconds)
-        const timeSpent = (Date.now() - captchaStartTime) / 1000;
-        if (timeSpent < 2) {
-            captchaError.textContent = 'Please take your time to solve the verification';
+    // Validate reCAPTCHA
+    function validateRecaptcha() {
+        const token = recaptchaToken.value;
+        if (!token || token.trim() === '') {
+            captchaError.textContent = 'Please complete the human verification';
             captchaError.classList.add('show');
-            captchaAnswer.classList.add('error');
-            generateCaptcha();
+            if (recaptchaWidgetId !== null && typeof grecaptcha !== 'undefined') {
+                grecaptcha.reset(recaptchaWidgetId);
+            }
             return false;
         }
-        
-        // Check if too many attempts (potential bot)
-        if (captchaAttempts > 5) {
-            captchaError.textContent = 'Too many incorrect attempts. Please refresh the page.';
-            captchaError.classList.add('show');
-            captchaAnswer.classList.add('error');
-            return false;
-        }
-        
-        const userAnswer = parseInt(captchaAnswer.value);
-        const correctAnswer = parseInt(captchaSolution.value);
-        
-        if (isNaN(userAnswer)) {
-            captchaError.textContent = 'Please enter a valid number';
-            captchaError.classList.add('show');
-            captchaAnswer.classList.add('error');
-            return false;
-        }
-        
-        if (userAnswer !== correctAnswer) {
-            captchaError.textContent = 'Incorrect answer. Please try again.';
-            captchaError.classList.add('show');
-            captchaAnswer.classList.add('error');
-            generateCaptcha(); // Generate new CAPTCHA on wrong answer
-            return false;
-        }
-        
-        // Additional security: Check if answer was solved too quickly after refresh
-        const solveTime = (Date.now() - captchaStartTime) / 1000;
-        if (solveTime < 1) {
-            captchaError.textContent = 'Please verify you are human';
-            captchaError.classList.add('show');
-            captchaAnswer.classList.add('error');
-            generateCaptcha();
-            return false;
-        }
-        
         captchaError.textContent = '';
         captchaError.classList.remove('show');
-        captchaAnswer.classList.remove('error');
         return true;
     }
     
-    // Initialize CAPTCHA on page load
-    if (captchaQuestion && captchaSolution) {
-        generateCaptcha();
-        
-        // Refresh CAPTCHA button
-        if (refreshCaptcha) {
-            refreshCaptcha.addEventListener('click', (e) => {
-                e.preventDefault();
-                generateCaptcha();
-            });
-        }
-        
-        // Clear error on input
-        if (captchaAnswer) {
-            captchaAnswer.addEventListener('input', () => {
-                captchaError.textContent = '';
-                captchaError.classList.remove('show');
-                captchaAnswer.classList.remove('error');
-            });
+    // Reset reCAPTCHA
+    function resetRecaptcha() {
+        if (recaptchaWidgetId !== null && typeof grecaptcha !== 'undefined') {
+            grecaptcha.reset(recaptchaWidgetId);
+            recaptchaToken.value = '';
         }
     }
     
@@ -715,9 +612,8 @@
             return;
         }
         
-        // Validate CAPTCHA
-        if (!validateCaptcha()) {
-            captchaAnswer.focus();
+        // Validate reCAPTCHA
+        if (!validateRecaptcha()) {
             registerBtn.disabled = false;
             registerBtn.textContent = 'Create Account';
             return;
@@ -747,7 +643,7 @@
                     province, 
                     district, 
                     password,
-                    captcha_answer: parseInt(captchaAnswer.value)
+                    recaptcha_token: recaptchaToken.value
                 })
             });
             
@@ -808,6 +704,11 @@
                 
                 // Show server validation errors for each field
                 showServerFieldErrors(serverErrors);
+                
+                // Reset reCAPTCHA if there's a captcha error
+                if (serverErrors.captcha) {
+                    resetRecaptcha();
+                }
                 
                 // Show generic message if there are field errors
                 showMessage('Please correct the errors below');

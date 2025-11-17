@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AIMHSA - Sign In</title>
     <link rel="stylesheet" href="auth.css" />
+    <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
 </head>
 <body>
     <div class="auth-container">
@@ -41,23 +42,12 @@
 	                    <a class="forgot-link" id="forgotLink" href="#">Forgot password?</a>
 	                </div>
 	                
-	                <!-- Human Verification (CAPTCHA) -->
+	                <!-- Human Verification (reCAPTCHA) -->
 	                <div class="form-group" id="captchaGroup">
-	                    <label for="captchaAnswer">Human Verification *</label>
-	                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-	                        <span id="captchaQuestion" style="font-size: 16px; font-weight: 600; color: #2c5aa0; padding: 8px 12px; background: #f0f4ff; border-radius: 6px; min-width: 120px; text-align: center;"></span>
-	                        <button type="button" id="refreshCaptcha" style="padding: 8px 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 14px;" title="Refresh verification">
-	                            <i class="fas fa-sync-alt"></i> New
-	                        </button>
-	                    </div>
-	                    <input type="number" id="captchaAnswer" name="captchaAnswer" 
-	                           placeholder="Enter your answer" 
-	                           min="0" 
-	                           max="100" 
-	                           required 
-	                           style="width: 100%;" />
+	                    <label>Human Verification *</label>
+	                    <div id="recaptcha-container" style="margin: 10px 0;"></div>
 	                    <div class="field-error" id="captchaError"></div>
-	                    <input type="hidden" id="captchaSolution" />
+	                    <input type="hidden" id="recaptchaToken" />
 	                </div>
 	                
                 <button type="submit" class="auth-btn" id="signInBtn">Sign In</button>
