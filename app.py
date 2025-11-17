@@ -139,6 +139,9 @@ FROM_EMAIL = current_config.FROM_EMAIL
 HDEV_SMS_API_ID = current_config.HDEV_SMS_API_ID
 HDEV_SMS_API_KEY = current_config.HDEV_SMS_API_KEY
 
+# --- Human verification ---
+HUMAN_CHECK_KEYWORD = os.getenv("HUMAN_CHECK_KEYWORD", "aimhsa").lower()
+
 # --- OpenAI Client Configuration ---
 openai_client = OpenAI(
     base_url=current_config.OLLAMA_BASE_URL,
@@ -2666,42 +2669,20 @@ def archive_conversation():
     finally:
         conn.close()
 
-def verify_recaptcha(token):
-    """Verify reCAPTCHA token with Google's API"""
-    if not token:
+def verify_human_check(answer: str) -> bool:
+    """
+    Lightweight human verification fallback that checks for a shared keyword.
+    Returns True only when the provided answer matches the configured keyword.
+    """
+    if not answer:
         return False
-    
-    secret_key = current_config.RECAPTCHA_SECRET_KEY
-    if not secret_key:
-        app.logger.warning("reCAPTCHA secret key not configured - skipping verification")
-        return True  # Allow if not configured (for development)
-    
-    try:
-        response = requests.post(
-            'https://www.google.com/recaptcha/api/siteverify',
-            data={
-                'secret': secret_key,
-                'response': token
-            },
-            timeout=5
-        )
-        result = response.json()
-        return result.get('success', False)
-    except Exception as e:
-        app.logger.error(f"reCAPTCHA verification error: {e}")
-        return False
-
-@app.get("/api/recaptcha-site-key")
-def get_recaptcha_site_key():
-    """Get reCAPTCHA site key for frontend"""
-    site_key = current_config.RECAPTCHA_SITE_KEY
-    return jsonify({"site_key": site_key})
+    return answer.strip().lower() == HUMAN_CHECK_KEYWORD
 
 @app.post("/api/register")
 def register():
     """
     POST /register
-    JSON: { "username": "...", "email": "...", "fullname": "...", "telephone": "...", "province": "...", "district": "...", "password": "...", "recaptcha_token": "..." }
+    JSON: { "username": "...", "email": "...", "fullname": "...", "telephone": "...", "province": "...", "district": "...", "password": "...", "human_check_answer": "..." }
     """
     try:
         data = request.get_json(force=True)
@@ -2716,14 +2697,14 @@ def register():
     province = (data.get("province") or "").strip()
     district = (data.get("district") or "").strip()
     password = (data.get("password") or "")
-    recaptcha_token = data.get("recaptcha_token", "").strip()
+    human_check_answer = (data.get("human_check_answer") or "").strip()
     
     # Collect validation errors
     errors = {}
     
-    # reCAPTCHA validation
-    if not verify_recaptcha(recaptcha_token):
-        errors["captcha"] = "Please complete the human verification"
+    # Human verification (simple keyword challenge)
+    if not verify_human_check(human_check_answer):
+        errors["human_check"] = "Please type AIMHSA to confirm you are human"
     
     # Validate required fields
     if not username:
@@ -2856,7 +2837,7 @@ def register():
 def login():
     """
     POST /login
-    JSON: { "email": "...", "password": "...", "recaptcha_token": "..." }
+    JSON: { "email": "...", "password": "...", "human_check_answer": "..." }
     """
     try:
         data = request.get_json(force=True)
@@ -2864,14 +2845,14 @@ def login():
         return jsonify({"error": "Invalid JSON"}), 400
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "")
-    recaptcha_token = data.get("recaptcha_token", "").strip()
+    human_check_answer = (data.get("human_check_answer") or "").strip()
     
     if not email or not password:
         return jsonify({"error": "email and password required"}), 400
     
-    # reCAPTCHA validation
-    if not verify_recaptcha(recaptcha_token):
-        return jsonify({"error": "Please complete the human verification"}), 400
+    # Human verification
+    if not verify_human_check(human_check_answer):
+        return jsonify({"error": "Please type AIMHSA to confirm you are human"}), 400
     
     # Email validation
     import re
@@ -3640,9 +3621,12 @@ def professional_login():
     username = (data.get("username") or "").strip()
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "")
+    human_check_answer = (data.get("human_check_answer") or "").strip()
     
     if (not username and not email) or not password:
         return jsonify({"error": "username/email and password required"}), 400
+    if not verify_human_check(human_check_answer):
+        return jsonify({"error": "Please type AIMHSA to confirm you are human"}), 400
     
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -3689,9 +3673,12 @@ def admin_login():
     
     username = (data.get("username") or "").strip()
     password = (data.get("password") or "")
+    human_check_answer = (data.get("human_check_answer") or "").strip()
     
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
+    if not verify_human_check(human_check_answer):
+        return jsonify({"error": "Please type AIMHSA to confirm you are human"}), 400
     
     conn = sqlite3.connect(DB_FILE)
     try:
