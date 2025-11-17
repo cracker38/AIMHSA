@@ -85,7 +85,7 @@
     function getFieldIdMapping() {
         return {
             'username': 'regUsername',
-            'email': 'regEmail',
+            'email': 'regEmail', 
             'fullname': 'regFullname',
             'telephone': 'regTelephone',
             'province': 'regProvince',
