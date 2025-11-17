@@ -2007,21 +2007,10 @@ CONTEXT:
     app.logger.info(f"Target language determined: {target_language} (confidence={language_confidence})")
 
     if language_confidence < LANGUAGE_CONFIDENCE_THRESHOLD:
-        clarification_message = (
-            "Hello! I want to make sure I reply in the language you prefer. "
-            "Could you please let me know whether you'd like to continue in English, French, Kiswahili, or Kinyarwanda?"
+        app.logger.info(
+            f"Language confidence {language_confidence} below threshold "
+            f"{LANGUAGE_CONFIDENCE_THRESHOLD}; defaulting to {target_language}"
         )
-        save_message(conv_id, "user", query)
-        save_message(conv_id, "assistant", clarification_message)
-        resp = {
-            "answer": clarification_message,
-            "id": conv_id,
-            "language_clarification_required": True,
-            "language_detection": target_info
-        }
-        if new_conv:
-            resp["new"] = True
-        return jsonify(resp)
     
     # Create language-specific system prompt for direct AI response generation
     system_prompt = create_language_specific_prompt(target_language)
