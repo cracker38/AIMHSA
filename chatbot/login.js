@@ -84,7 +84,7 @@
             humanCheckError.textContent = 'Please type AIMHSA to confirm you are human';
             humanCheckError.classList.add('show');
             return false;
-        }
+            }
         if (value.toLowerCase() !== HUMAN_CHECK_KEYWORD) {
             humanCheckError.textContent = 'Please type AIMHSA exactly as shown';
             humanCheckError.classList.add('show');
@@ -94,7 +94,7 @@
         humanCheckError.classList.remove('show');
         return true;
     }
-
+    
     humanCheckInput?.addEventListener('input', () => {
         humanCheckError.textContent = '';
         humanCheckError.classList.remove('show');

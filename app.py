@@ -1276,6 +1276,41 @@ def _mmr_selection(doc_embs: np.ndarray, query_emb: np.ndarray, k: int = 4, lamb
         candidates.remove(best_idx)
     return selected
 
+def build_conversation_profile(history: List[Dict], max_messages: int = 20) -> Dict[str, str]:
+    """
+    Analyze recent conversation history to extract key user signals that can
+    be injected into prompts so the assistant better understands context.
+    Returns a dict with short summaries of:
+      - emotional_state
+      - main_topics
+      - goals
+      - previous_responses (brief recap)
+    """
+    recent = history[-max_messages:]
+    user_messages = [h["content"] for h in recent if h.get("role") == "user"]
+    assistant_messages = [h["content"] for h in recent if h.get("role") == "assistant"]
+
+    def summarize(messages, label):
+        if not messages:
+            return f"No recent {label} noted."
+        last = messages[-3:]
+        joined = " ".join(last)
+        return joined[:600]
+
+    profile = {
+        "emotional_state": summarize(
+            [m for m in user_messages if any(word in m.lower() for word in ["feel", "sad", "stress", "anxious", "angry", "happy"])],
+            "emotional statements"
+        ),
+        "main_topics": summarize(user_messages, "topics"),
+        "goals": summarize(
+            [m for m in user_messages if any(word in m.lower() for word in ["want", "need", "plan", "hope"])],
+            "stated goals"
+        ),
+        "previous_responses": summarize(assistant_messages, "assistant responses")
+    }
+    return profile
+
 def retrieve(query: str, k: int = 4, lambda_param: float = 0.6):
     """
     Semantic retrieval: embed the query with a sentence embedding model and
@@ -2012,8 +2047,18 @@ CONTEXT:
             f"{LANGUAGE_CONFIDENCE_THRESHOLD}; defaulting to {target_language}"
         )
     
-    # Create language-specific system prompt for direct AI response generation
-    system_prompt = create_language_specific_prompt(target_language)
+    # Build conversation profile to maintain context awareness
+    profile = build_conversation_profile(normalized_server)
+    profile_context = (
+        f"[Conversation Profile]\n"
+        f"- Emotional cues: {profile['emotional_state']}\n"
+        f"- Main topics: {profile['main_topics']}\n"
+        f"- Stated goals: {profile['goals']}\n"
+        f"- Assistant recently said: {profile['previous_responses']}\n"
+    )
+
+    # Create language-specific system prompt augmented with profile context
+    system_prompt = create_language_specific_prompt(target_language) + "\n\n" + profile_context
 
     # Add system prompt and user question to messages
     messages.insert(0, {"role": "system", "content": system_prompt})
