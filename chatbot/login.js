@@ -73,95 +73,32 @@
     const mfaVerifyBtn = document.getElementById('mfaVerifyBtn');
     const mfaResendBtn = document.getElementById('mfaResendBtn');
     const mfaMessage = document.getElementById('mfaMessage');
-    // reCAPTCHA elements
-    const recaptchaContainer = document.getElementById('recaptcha-container');
-    const recaptchaToken = document.getElementById('recaptchaToken');
-    const captchaError = document.getElementById('captchaError');
-    
-    let recaptchaWidgetId = null;
-    let recaptchaSiteKey = '';
-    
-    // Get reCAPTCHA site key from config or environment
-    async function getRecaptchaSiteKey() {
-        try {
-            // Try to get from API endpoint
-            const response = await fetch('/api/recaptcha-site-key');
-            if (response.ok) {
-                const data = await response.json();
-                return data.site_key || '';
-            }
-        } catch (e) {
-            console.warn('Could not fetch reCAPTCHA site key from API:', e);
-        }
-        return '';
-    }
-    
-    // Initialize reCAPTCHA
-    window.onRecaptchaLoad = async function() {
-        try {
-            recaptchaSiteKey = await getRecaptchaSiteKey();
-            if (!recaptchaSiteKey) {
-                console.warn('reCAPTCHA site key not configured. Please set RECAPTCHA_SITE_KEY in environment.');
-                if (recaptchaContainer) {
-                    recaptchaContainer.innerHTML = '<p style="color: #999; font-size: 12px;">reCAPTCHA not configured</p>';
-                }
-                return;
-            }
-            
-            if (recaptchaContainer && typeof grecaptcha !== 'undefined') {
-                recaptchaWidgetId = grecaptcha.render(recaptchaContainer, {
-                    'sitekey': recaptchaSiteKey,
-                    'callback': function(token) {
-                        // reCAPTCHA verified successfully
-                        recaptchaToken.value = token;
-                        captchaError.textContent = '';
-                        captchaError.classList.remove('show');
-                    },
-                    'expired-callback': function() {
-                        // Handle expiration
-                        recaptchaToken.value = '';
-                        captchaError.textContent = 'Verification challenge expired. Check the checkbox again.';
-                        captchaError.classList.add('show');
-                    },
-                    'error-callback': function() {
-                        // Handle error
-                        recaptchaToken.value = '';
-                        captchaError.textContent = 'Verification failed. Please try again.';
-                        captchaError.classList.add('show');
-                    }
-                });
-            }
-        } catch (e) {
-            console.error('Error initializing reCAPTCHA:', e);
-            if (recaptchaContainer) {
-                recaptchaContainer.innerHTML = '<p style="color: #d32f2f; font-size: 12px;">Error loading reCAPTCHA. Please refresh the page.</p>';
-            }
-        }
-    };
-    
-    // Validate reCAPTCHA
-    function validateRecaptcha() {
-        const token = recaptchaToken.value;
-        if (!token || token.trim() === '') {
-            captchaError.textContent = 'Please complete the human verification';
-            captchaError.classList.add('show');
-            if (recaptchaWidgetId !== null && typeof grecaptcha !== 'undefined') {
-                grecaptcha.reset(recaptchaWidgetId);
-            }
+    const humanCheckInput = document.getElementById('loginHumanCheck');
+    const humanCheckError = document.getElementById('loginHumanCheckError');
+    const HUMAN_CHECK_KEYWORD = 'aimhsa';
+
+    function validateHumanCheck() {
+        if (!humanCheckInput) return true;
+        const value = (humanCheckInput.value || '').trim();
+        if (!value) {
+            humanCheckError.textContent = 'Please type AIMHSA to confirm you are human';
+            humanCheckError.classList.add('show');
             return false;
         }
-        captchaError.textContent = '';
-        captchaError.classList.remove('show');
+        if (value.toLowerCase() !== HUMAN_CHECK_KEYWORD) {
+            humanCheckError.textContent = 'Please type AIMHSA exactly as shown';
+            humanCheckError.classList.add('show');
+            return false;
+        }
+        humanCheckError.textContent = '';
+        humanCheckError.classList.remove('show');
         return true;
     }
-    
-    // Reset reCAPTCHA
-    function resetRecaptcha() {
-        if (recaptchaWidgetId !== null && typeof grecaptcha !== 'undefined') {
-            grecaptcha.reset(recaptchaWidgetId);
-            recaptchaToken.value = '';
-        }
-    }
+
+    humanCheckInput?.addEventListener('input', () => {
+        humanCheckError.textContent = '';
+        humanCheckError.classList.remove('show');
+    });
     
     // Show message
     function showMessage(text, type = 'error') {
@@ -324,8 +261,7 @@
             return;
         }
         
-        // Validate CAPTCHA
-        if (!validateRecaptcha()) {
+        if (!validateHumanCheck()) {
             signInBtn.disabled = false;
             signInBtn.textContent = 'Sign In';
             return;
@@ -350,7 +286,7 @@
                     body: JSON.stringify({ 
                         email, 
                         password,
-                        recaptcha_token: recaptchaToken.value
+                        human_check_answer: humanCheckInput ? humanCheckInput.value.trim() : ''
                     })
                 });
                 
@@ -376,7 +312,7 @@
                     body: JSON.stringify({ 
                         email, 
                         password,
-                        recaptcha_token: recaptchaToken.value
+                        human_check_answer: humanCheckInput ? humanCheckInput.value.trim() : ''
                     })
                 });
                 
@@ -405,7 +341,7 @@
                     body: JSON.stringify({ 
                         username: email, 
                         password,
-                        recaptcha_token: recaptchaToken.value
+                        human_check_answer: humanCheckInput ? humanCheckInput.value.trim() : ''
                     })
                 });
                 
@@ -434,8 +370,7 @@
         } catch (err) {
             console.error('Login error:', err);
             showMessage(err.message || 'Login failed. Please try again.');
-            // Reset reCAPTCHA on error
-            resetRecaptcha();
+            humanCheckError.textContent = '';
         } finally {
             signInBtn.disabled = false;
             signInBtn.textContent = 'Sign In';

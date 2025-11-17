@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AIMHSA - Create Account</title>
     <link rel="stylesheet" href="auth.css" />
-    <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
 </head>
 <body>
     <div class="auth-container">
@@ -116,12 +115,11 @@
                     <div class="field-error" id="agreeTermsError"></div>
                 </div>
                 
-                <!-- Human Verification (reCAPTCHA) -->
-                <div class="form-group" id="captchaGroup">
-                    <label>Human Verification *</label>
-                    <div id="recaptcha-container" style="margin: 10px 0;"></div>
-                    <div class="field-error" id="captchaError"></div>
-                    <input type="hidden" id="recaptchaToken" />
+                <div class="form-group" id="humanCheckGroup">
+                    <label for="humanCheckAnswer">Human Verification *</label>
+                    <p class="field-help">Type the word <strong>AIMHSA</strong> to confirm you are human.</p>
+                    <input type="text" id="humanCheckAnswer" name="humanCheckAnswer" placeholder="Type AIMHSA exactly" required />
+                    <div class="field-error" id="humanCheckAnswerError"></div>
                 </div>
                 
                 <button type="submit" class="auth-btn" id="registerBtn">Create Account</button>
