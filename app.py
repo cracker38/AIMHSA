@@ -2175,26 +2175,24 @@ CONTEXT:
         else:
             app.logger.info(f"Got valid answer: {answer[:50]}...")
             
-            # Translate answer to target language if not English
-            # This ensures accurate translation even if LLM generated in wrong language
+            # Only translate if detected language mismatches with high confidence
             if target_language != 'en':
                 try:
-                    # Check if answer is already in target language (simple heuristic)
-                    # If answer contains common English words, translate it
-                    english_indicators = ['the ', 'and ', 'is ', 'are ', 'was ', 'were ', 'have ', 'has ', 
-                                         'I ', 'you ', 'he ', 'she ', 'we ', 'they ', 'this ', 'that ']
-                    needs_translation = any(indicator in answer.lower()[:100] for indicator in english_indicators)
-                    
-                    if needs_translation:
-                        app.logger.info(f"Translating answer to {target_language}")
+                    detected = translation_service.detect_language_confidence(answer)
+                    answer_lang = detected.get("language")
+                    answer_conf = detected.get("confidence", 0.0)
+                    if answer_lang != target_language and answer_conf >= 0.6:
+                        app.logger.info(
+                            f"Answer language ({answer_lang}, conf={answer_conf}) "
+                            f"differs from target {target_language}; translating."
+                        )
                         translated_answer = translation_service.translate_text(answer, target_language)
                         if translated_answer and translated_answer.strip():
                             answer = translated_answer
-                            app.logger.info(f"Translation successful: {answer[:50]}...")
+                            app.logger.info("Translation successful.")
                 except Exception as trans_error:
-                    app.logger.warning(f"Translation failed, using original answer: {trans_error}")
-                    # Continue with original answer if translation fails
-                
+                    app.logger.warning(f"Language verification/translation failed: {trans_error}")
+                    # Keep original answer if translation fails
     except Exception as e:
         app.logger.error(f"Failed to get chat response with {CHAT_MODEL}: {e}")
         app.logger.error(f"Exception type: {type(e).__name__}")
