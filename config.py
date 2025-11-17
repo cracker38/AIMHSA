@@ -48,6 +48,10 @@ class Config:
     STORAGE_DIR = os.getenv('STORAGE_DIR', 'storage')
     DATA_DIR = os.getenv('DATA_DIR', 'data')
     EMBED_FILE = os.path.join(STORAGE_DIR, 'embeddings.json')
+    
+    # reCAPTCHA Configuration
+    RECAPTCHA_SITE_KEY = os.getenv('RECAPTCHA_SITE_KEY', '')
+    RECAPTCHA_SECRET_KEY = os.getenv('RECAPTCHA_SECRET_KEY', '')
 
 class DevelopmentConfig(Config):
     """Development environment configuration"""

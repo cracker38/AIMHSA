@@ -33,6 +33,7 @@ except ImportError:
     pytesseract = None
 
 from config import current_config
+import requests
 
 # Initialize Hugging Face AI service
 from hf_ai_service import get_ai_service
@@ -2679,11 +2680,42 @@ def archive_conversation():
     finally:
         conn.close()
 
+def verify_recaptcha(token):
+    """Verify reCAPTCHA token with Google's API"""
+    if not token:
+        return False
+    
+    secret_key = current_config.RECAPTCHA_SECRET_KEY
+    if not secret_key:
+        app.logger.warning("reCAPTCHA secret key not configured - skipping verification")
+        return True  # Allow if not configured (for development)
+    
+    try:
+        response = requests.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            data={
+                'secret': secret_key,
+                'response': token
+            },
+            timeout=5
+        )
+        result = response.json()
+        return result.get('success', False)
+    except Exception as e:
+        app.logger.error(f"reCAPTCHA verification error: {e}")
+        return False
+
+@app.get("/api/recaptcha-site-key")
+def get_recaptcha_site_key():
+    """Get reCAPTCHA site key for frontend"""
+    site_key = current_config.RECAPTCHA_SITE_KEY
+    return jsonify({"site_key": site_key})
+
 @app.post("/api/register")
 def register():
     """
     POST /register
-    JSON: { "username": "...", "email": "...", "fullname": "...", "telephone": "...", "province": "...", "district": "...", "password": "..." }
+    JSON: { "username": "...", "email": "...", "fullname": "...", "telephone": "...", "province": "...", "district": "...", "password": "...", "recaptcha_token": "..." }
     """
     try:
         data = request.get_json(force=True)
@@ -2698,19 +2730,14 @@ def register():
     province = (data.get("province") or "").strip()
     district = (data.get("district") or "").strip()
     password = (data.get("password") or "")
-    captcha_answer = data.get("captcha_answer")
+    recaptcha_token = data.get("recaptcha_token", "").strip()
     
     # Collect validation errors
     errors = {}
     
-    # Advanced CAPTCHA validation (supports math, word problems, and patterns)
-    try:
-        captcha_value = int(captcha_answer) if captcha_answer is not None else None
-        # Expanded range: 0-100 to support multiplication and mixed operations
-        if captcha_value is None or captcha_value < 0 or captcha_value > 100:
-            errors["captcha"] = "Please complete the human verification"
-    except (ValueError, TypeError):
-        errors["captcha"] = "Invalid human verification answer"
+    # reCAPTCHA validation
+    if not verify_recaptcha(recaptcha_token):
+        errors["captcha"] = "Please complete the human verification"
     
     # Validate required fields
     if not username:
@@ -2843,7 +2870,7 @@ def register():
 def login():
     """
     POST /login
-    JSON: { "email": "...", "password": "..." }
+    JSON: { "email": "...", "password": "...", "recaptcha_token": "..." }
     """
     try:
         data = request.get_json(force=True)
@@ -2851,19 +2878,14 @@ def login():
         return jsonify({"error": "Invalid JSON"}), 400
     email = (data.get("email") or "").strip()
     password = (data.get("password") or "")
-    captcha_answer = data.get("captcha_answer")
+    recaptcha_token = data.get("recaptcha_token", "").strip()
     
     if not email or not password:
         return jsonify({"error": "email and password required"}), 400
     
-    # Advanced CAPTCHA validation (supports math, word problems, and patterns)
-    try:
-        captcha_value = int(captcha_answer) if captcha_answer is not None else None
-        # Expanded range: 0-100 to support multiplication and mixed operations
-        if captcha_value is None or captcha_value < 0 or captcha_value > 100:
-            return jsonify({"error": "Please complete the human verification"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid human verification answer"}), 400
+    # reCAPTCHA validation
+    if not verify_recaptcha(recaptcha_token):
+        return jsonify({"error": "Please complete the human verification"}), 400
     
     # Email validation
     import re
