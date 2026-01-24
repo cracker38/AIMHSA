@@ -17,11 +17,18 @@ from app import app
 from config import current_config
 
 if __name__ == "__main__":
+    import sys
+    # Fix Windows console encoding
+    if sys.platform == 'win32':
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+    
     host = os.environ.get('HOST', getattr(current_config, 'HOST', '0.0.0.0'))
     port = int(os.environ.get('PORT', getattr(current_config, 'PORT', 7860)))
 
-    print(f"🚀 Starting AIMHSA on {host}:{port} (production mode)")
-    print(f"🔗 Base URL: http://{host}:{port}")
+    print(f"Starting AIMHSA on {host}:{port} (production mode)")
+    print(f"Base URL: http://{host}:{port}")
 
     app.run(
         host=host,
