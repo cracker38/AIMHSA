@@ -10,6 +10,70 @@
   
   const API_BASE_URL = getAPIBaseUrl();
   
+  // Check AI service status on page load
+  async function checkAIServiceStatus() {
+    try {
+      const statusResp = await api("/api/config-status", {
+        method: "GET"
+      });
+      
+      if (statusResp && statusResp.ai_service) {
+        if (!statusResp.ai_service.available) {
+          // Show warning banner
+          const warningBanner = document.createElement("div");
+          warningBanner.id = "ai-service-warning";
+          warningBanner.style.cssText = `
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            padding: 16px 20px;
+            margin: 0 0 16px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+          `;
+          warningBanner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 20px;">⚠️</span>
+              <div>
+                <strong>AI Service Not Configured</strong>
+                <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">
+                  The chatbot is running in fallback mode. Add OLLAMA_API_KEY in Hugging Face Space Settings → Repository secrets.
+                </div>
+              </div>
+            </div>
+            <a href="https://huggingface.co/spaces/CYPADILtd/aimhsa-chatbot/settings" 
+               target="_blank" 
+               style="color: white; text-decoration: underline; font-weight: 600; white-space: nowrap;">
+              Fix Now →
+            </a>
+          `;
+          
+          const chatArea = document.querySelector('.chat-area');
+          if (chatArea) {
+            const header = chatArea.querySelector('.chat-header');
+            if (header && header.nextSibling) {
+              chatArea.insertBefore(warningBanner, header.nextSibling);
+            } else {
+              chatArea.insertBefore(warningBanner, chatArea.firstChild);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Could not check AI service status:", error);
+    }
+  }
+  
+  // Check status when page loads
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAIServiceStatus);
+  } else {
+    checkAIServiceStatus();
+  }
+
   // Display emergency booking notification
   function displayEmergencyBooking(bookingData) {
     const emergencyCard = document.createElement("div");
