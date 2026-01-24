@@ -18,6 +18,15 @@ from config import current_config
 
 if __name__ == "__main__":
     import sys
+    import logging
+    
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
     # Fix Windows console encoding
     if sys.platform == 'win32':
         import codecs
@@ -27,8 +36,43 @@ if __name__ == "__main__":
     host = os.environ.get('HOST', getattr(current_config, 'HOST', '0.0.0.0'))
     port = int(os.environ.get('PORT', getattr(current_config, 'PORT', 7860)))
 
-    print(f"Starting AIMHSA on {host}:{port} (production mode)")
-    print(f"Base URL: http://{host}:{port}")
+    # Log startup information
+    logger.info("=" * 60)
+    logger.info("Starting AIMHSA")
+    logger.info("=" * 60)
+    logger.info(f"Host: {host}")
+    logger.info(f"Port: {port}")
+    logger.info(f"Environment: {os.environ.get('FLASK_ENV', 'production')}")
+    
+    # Check critical environment variables
+    logger.info("=" * 60)
+    logger.info("Environment Variables Check")
+    logger.info("=" * 60)
+    
+    ollama_key = os.environ.get('OLLAMA_API_KEY', '')
+    if ollama_key:
+        logger.info(f"OLLAMA_API_KEY: SET (length: {len(ollama_key)})")
+    else:
+        logger.warning("OLLAMA_API_KEY: NOT SET - AI service will use fallback mode")
+        logger.warning("  To fix: Add OLLAMA_API_KEY in Hugging Face Space Settings > Repository secrets")
+    
+    logger.info(f"OLLAMA_BASE_URL: {os.environ.get('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1')}")
+    logger.info(f"CHAT_MODEL: {os.environ.get('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')}")
+    
+    # Check AI service availability
+    try:
+        from hf_ai_service import get_ai_service
+        ai_service = get_ai_service()
+        if ai_service.is_available():
+            logger.info("AI Service: AVAILABLE")
+        else:
+            logger.warning("AI Service: UNAVAILABLE - Check OLLAMA_API_KEY")
+    except Exception as e:
+        logger.error(f"AI Service: ERROR - {e}")
+    
+    logger.info("=" * 60)
+    logger.info(f"Starting server on http://{host}:{port}")
+    logger.info("=" * 60)
 
     app.run(
         host=host,
