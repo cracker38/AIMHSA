@@ -24,8 +24,17 @@ class HuggingFaceAIService:
             api_key = os.getenv("OLLAMA_API_KEY", "")
             
             if not api_key:
-                self.logger.warning("⚠️ OLLAMA_API_KEY not set in environment variables")
-                self.logger.warning("AI responses will use fallback mode. Please set OLLAMA_API_KEY in your .env file")
+                self.logger.warning("=" * 60)
+                self.logger.warning("⚠️ OLLAMA_API_KEY NOT SET")
+                self.logger.warning("=" * 60)
+                self.logger.warning("AI responses will use fallback mode.")
+                self.logger.warning("")
+                self.logger.warning("To fix this:")
+                self.logger.warning("1. Go to: https://huggingface.co/spaces/CYPADILtd/aimhsa-chatbot/settings")
+                self.logger.warning("2. Click 'Repository secrets'")
+                self.logger.warning("3. Add secret: OLLAMA_API_KEY = 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")
+                self.logger.warning("4. Restart the Space")
+                self.logger.warning("=" * 60)
                 self.openai_client = None
                 return
             
