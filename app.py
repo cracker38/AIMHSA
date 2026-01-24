@@ -1675,6 +1675,33 @@ def get_professional_by_id(professional_id: int) -> Optional[Dict]:
 def healthz():
     return {"ok": True}
 
+@app.get("/api/config-status")
+def config_status():
+    """Diagnostic endpoint to check configuration status"""
+    import os
+    from hf_ai_service import get_ai_service
+    
+    ollama_key = os.getenv('OLLAMA_API_KEY', '')
+    ai_service = get_ai_service()
+    
+    status = {
+        "ok": True,
+        "ai_service": {
+            "available": ai_service.is_available() if ai_service else False,
+            "api_key_set": bool(ollama_key),
+            "api_key_length": len(ollama_key) if ollama_key else 0,
+            "base_url": os.getenv('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1'),
+            "chat_model": os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
+        },
+        "environment": {
+            "flask_env": os.getenv('FLASK_ENV', 'development'),
+            "debug": os.getenv('DEBUG', 'False').lower() == 'true'
+        },
+        "message": "AI Service is working!" if (ai_service and ai_service.is_available()) else "AI Service needs OLLAMA_API_KEY environment variable"
+    }
+    
+    return jsonify(status)
+
 @app.get("/debug/login")
 def debug_login():
     """Debug endpoint to check login status"""
