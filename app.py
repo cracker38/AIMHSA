@@ -2013,22 +2013,7 @@ def ask():
     # load server-side history for this conv_id
     server_history = load_history(conv_id)
 
-    # Simple greetings: return welcome immediately without calling the AI (guarantees correct response)
-    if _is_simple_greeting(query):
-        target_info = determine_target_language(query, server_history)
-        target_language = target_info.get("language", "en")
-        welcome = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
-        save_message(conv_id, "user", query)
-        save_message(conv_id, "assistant", welcome)
-        return jsonify({
-            "answer": welcome,
-            "sources": [],
-            "id": conv_id,
-            "language_detection": target_info,
-            "risk_assessment": {"risk_level": "low", "risk_score": 0.0, "detected_indicators": []},
-            **({"new": True} if new_conv else {})
-        })
-
+    # All responses go through the API (no greeting short-circuit)
     # load attachments for this conv_id (won't be persisted into messages table;
     # attachments are provided as separate CONTEXT blocks to the model)
     attachments = load_attachments(conv_id)
@@ -2086,10 +2071,14 @@ def ask():
                 # already present server-side; still include in messages so model has recent context
                 messages.append({"role": role, "content": content})
 
-    # retrieval-based context
-    # Retrieve more context for better grounded answers
-    top = retrieve(query, k=6)
-    context = build_context(top)
+    # retrieval-based context (non-fatal: if embeddings fail, continue with empty context)
+    try:
+        top = retrieve(query, k=6)
+        context = build_context(top)
+    except Exception as ret_err:
+        app.logger.warning("Retrieval failed, using empty context: %s", ret_err)
+        top = []
+        context = ""
 
     user_prompt = f"""Answer the user's question using the CONTEXT below when relevant.
 You are a mental health support assistant. If the question is about mental health, provide helpful support.
@@ -2219,25 +2208,17 @@ CONTEXT:
         answer = ai_service.generate_response(messages)
         app.logger.info(f"Hugging Face response received: {answer[:100] if answer else ''}...")
         
-        # When AI returns the generic fallback (e.g. API unavailable), give a proper welcome for simple greetings
+        # Check if answer is empty, too short, or is the generic fallback (API failed)
         is_fallback = answer and ("rephrase your question" in (answer or "").lower() or answer.strip() == AI_SERVICE_FALLBACK_EN)
-        if is_fallback and _is_simple_greeting(query):
-            answer = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
-            app.logger.info("Replaced fallback with welcome response for greeting.")
-        
-        # Check if answer is empty or too short - use welcome or generic fallback
-        if not answer or not isinstance(answer, str) or len(answer.strip()) < 10:
-            app.logger.warning(f"Answer too short or empty: '{answer}'")
-            if _is_simple_greeting(query):
-                answer = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
-            else:
-                fallback_responses = {
+        if not answer or not isinstance(answer, str) or len(answer.strip()) < 10 or is_fallback:
+            app.logger.warning(f"API returned empty/short/fallback: '{answer}'")
+            fallback_responses = {
                     'en': "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
                     'fr': "Je suis là pour vous aider. Pourriez-vous reformuler votre question? En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
                     'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
                     'sw': "Niko hapa kusaidia. Tafadhali rudia swali lako? Kwa dharura, piga simu ya Ligne d'assistance en santé mentale ya Rwanda 105 au CARAES Ndera Hospital +250 788 305 703."
                 }
-                answer = fallback_responses.get(target_language, fallback_responses['en'])
+            answer = fallback_responses.get(target_language, fallback_responses['en'])
         else:
             app.logger.info(f"Got valid answer: {answer[:50]}...")
             
