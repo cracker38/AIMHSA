@@ -53,36 +53,42 @@ class HuggingFaceAIService:
             self.logger.warning("Empty or invalid messages; returning fallback")
             return self._get_fallback_response()
         
-        try:
-            chat_model = os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct:free").strip()
-            # Reject invalid model IDs (e.g. URL path like "api/v1")
-            if not chat_model or chat_model in ("api/v1", "api/v1/") or chat_model.startswith("http"):
-                chat_model = "meta-llama/llama-3.1-8b-instruct:free"
-                self.logger.warning("Invalid CHAT_MODEL, using fallback: %s", chat_model)
-            self.logger.info("Calling API model=%s messages=%d", chat_model, len(messages))
-            
-            response = self.openai_client.chat.completions.create(
-                model=chat_model,
-                messages=messages,
-                temperature=0.7,
-                top_p=0.9,
-                max_tokens=1024,
-            )
-            
-            if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
-                self.logger.warning("API returned no choices; using fallback")
+        chat_model = os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct:free").strip()
+        if not chat_model or chat_model in ("api/v1", "api/v1/") or chat_model.startswith("http"):
+            chat_model = "meta-llama/llama-3.1-8b-instruct:free"
+            self.logger.warning("Invalid CHAT_MODEL, using fallback: %s", chat_model)
+
+        for attempt in range(2):
+            try:
+                self.logger.info("Calling API model=%s messages=%d (attempt %d)", chat_model, len(messages), attempt + 1)
+                response = self.openai_client.chat.completions.create(
+                    model=chat_model,
+                    messages=messages,
+                    temperature=0.7,
+                    top_p=0.9,
+                    max_tokens=1024,
+                )
+                if not response or not getattr(response, "choices", None) or len(response.choices) == 0:
+                    self.logger.warning("API returned no choices; using fallback")
+                    if attempt == 0:
+                        continue
+                    return self._get_fallback_response()
+                content = response.choices[0].message.content
+                if content and isinstance(content, str) and content.strip():
+                    return content.strip()
+                self.logger.warning("API returned empty content")
+                if attempt == 0:
+                    continue
                 return self._get_fallback_response()
-            
-            content = response.choices[0].message.content
-            if content and isinstance(content, str) and content.strip():
-                return content.strip()
-            
-            self.logger.warning("API returned empty content; using fallback")
-            return self._get_fallback_response()
-            
-        except Exception as e:
-            self.logger.exception("API call failed: %s", str(e))
-            return self._get_fallback_response()
+            except Exception as e:
+                self.logger.warning("API call failed (attempt %d): %s", attempt + 1, str(e))
+                if attempt == 0:
+                    import time
+                    time.sleep(1)
+                    continue
+                self.logger.exception("API call failed after retry")
+                return self._get_fallback_response()
+        return self._get_fallback_response()
     
     def _get_fallback_response(self) -> str:
         """Get a helpful fallback response when AI is unavailable"""
