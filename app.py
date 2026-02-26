@@ -2198,25 +2198,41 @@ CONTEXT:
             """
             messages.append({"role": "system", "content": emergency_prompt})
 
+    # If AI is not configured (e.g. missing OLLAMA_API_KEY on HF Space), return clear message
+    if not ai_service.is_available():
+        msg = (
+            "The AI service is not configured on this server. "
+            "Add OLLAMA_API_KEY (your OpenRouter API key) to Repository secrets: "
+            "Space → Settings → Repository secrets → New secret. Then restart the Space."
+        )
+        save_message(conv_id, "user", query)
+        save_message(conv_id, "assistant", msg)
+        return jsonify({
+            "answer": msg,
+            "sources": [],
+            "id": conv_id,
+            "ai_configured": False,
+            "risk_assessment": {"risk_level": "low", "risk_score": 0.0, "detected_indicators": []},
+        })
+
     try:
         # Select chat model: allow per-request override, fallback to env CHAT_MODEL
         req_model = (data.get("model") or "").strip()
-        # Use Hugging Face AI service instead of Ollama
-        app.logger.info(f"Calling Hugging Face AI service")
+        app.logger.info("Calling AI service")
         
-        # Generate response using Hugging Face model
+        # Generate response using AI (OpenRouter)
         answer = ai_service.generate_response(messages)
         app.logger.info(f"Hugging Face response received: {answer[:100] if answer else ''}...")
         
         # Check if answer is empty, too short, or is the generic fallback (API failed)
         is_fallback = answer and ("rephrase your question" in (answer or "").lower() or answer.strip() == AI_SERVICE_FALLBACK_EN)
         if not answer or not isinstance(answer, str) or len(answer.strip()) < 10 or is_fallback:
-            app.logger.warning(f"API returned empty/short/fallback: '{answer}'")
+            app.logger.warning("API returned empty/short/fallback - AI may be unavailable or key invalid")
             fallback_responses = {
-                    'en': "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
-                    'fr': "Je suis là pour vous aider. Pourriez-vous reformuler votre question? En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
-                    'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
-                    'sw': "Niko hapa kusaidia. Tafadhali rudia swali lako? Kwa dharura, piga simu ya Ligne d'assistance en santé mentale ya Rwanda 105 au CARAES Ndera Hospital +250 788 305 703."
+                    'en': "The AI service isn't responding right now. Please try again in a moment. If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
+                    'fr': "Le service IA ne répond pas pour le moment. Veuillez réessayer. En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
+                    'rw': "Serivisi ya AI ntabwo isubiza ubu. Murakoze mugerageze mukanya. Ku bihano, hamagara 105 cyangwa CARAES Ndera Hospital +250 788 305 703.",
+                    'sw': "Huduma ya AI haijibu sasa. Tafadhali jaribu tena baadaye. Kwa dharura, piga 105 au CARAES Ndera Hospital +250 788 305 703."
                 }
             answer = fallback_responses.get(target_language, fallback_responses['en'])
         else:
