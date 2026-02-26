@@ -10,70 +10,6 @@
   
   const API_BASE_URL = getAPIBaseUrl();
   
-  // Check AI service status on page load
-  async function checkAIServiceStatus() {
-    try {
-      const statusResp = await api("/api/config-status", {
-        method: "GET"
-      });
-      
-      if (statusResp && statusResp.ai_service) {
-        if (!statusResp.ai_service.available) {
-          // Show warning banner
-          const warningBanner = document.createElement("div");
-          warningBanner.id = "ai-service-warning";
-          warningBanner.style.cssText = `
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            color: white;
-            padding: 16px 20px;
-            margin: 0 0 16px 0;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 14px;
-          `;
-          warningBanner.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span style="font-size: 20px;">⚠️</span>
-              <div>
-                <strong>AI Service Not Configured</strong>
-                <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">
-                  The chatbot is running in fallback mode. Add OLLAMA_API_KEY in Hugging Face Space Settings → Repository secrets.
-                </div>
-              </div>
-            </div>
-            <a href="https://huggingface.co/spaces/CYPADILtd/aimhsa-chatbot/settings" 
-               target="_blank" 
-               style="color: white; text-decoration: underline; font-weight: 600; white-space: nowrap;">
-              Fix Now →
-            </a>
-          `;
-          
-          const chatArea = document.querySelector('.chat-area');
-          if (chatArea) {
-            const header = chatArea.querySelector('.chat-header');
-            if (header && header.nextSibling) {
-              chatArea.insertBefore(warningBanner, header.nextSibling);
-            } else {
-              chatArea.insertBefore(warningBanner, chatArea.firstChild);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("Could not check AI service status:", error);
-    }
-  }
-  
-  // Check status when page loads
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', checkAIServiceStatus);
-  } else {
-    checkAIServiceStatus();
-  }
-
   // Display emergency booking notification
   function displayEmergencyBooking(bookingData) {
     const emergencyCard = document.createElement("div");
@@ -401,37 +337,37 @@
   }
   
   async function api(path, opts) {
-    // Try multiple endpoint patterns to handle both app.py and run_aimhsa.py
+    const base = (typeof API_BASE_URL === 'string' && API_BASE_URL) ? API_BASE_URL : (window.location.origin || '');
     const endpoints = [
-      API_BASE_URL + path,           // Direct path (app.py style)
-      API_BASE_URL + '/api' + path   // API prefixed path (run_aimhsa.py style)
+      base + path,
+      base + '/api' + path
     ];
-    
+    console.log('[AIMHSA API] Base URL:', base, '| Path:', path, '| Will try:', endpoints[0]);
     let lastError;
     for (const url of endpoints) {
       try {
         const res = await fetch(url, opts);
+        console.log('[AIMHSA API] Response:', url, 'Status:', res.status, res.statusText);
         if (res.ok) {
-          return res.json();
+          const data = await res.json();
+          console.log('[AIMHSA API] Success:', path, 'answer length:', (data.answer && data.answer.length) || 0);
+          return data;
         }
-        if (res.status === 404 && url === endpoints[0]) {
-          // Try the next endpoint
-          continue;
-        }
-        // If not 404 or this is the last endpoint, handle the error
         const txt = await res.text();
-        throw new Error(txt || res.statusText);
+        console.error('[AIMHSA API] Error response:', res.status, url, txt.substring(0, 500));
+        const err = new Error(txt || res.statusText);
+        err.status = res.status;
+        err.body = txt;
+        throw err;
       } catch (error) {
         lastError = error;
-        if (url === endpoints[0] && error.message.includes('404')) {
-          // Try the next endpoint
+        if (url === endpoints[0] && (error.message && error.message.includes('404') || (error.status === 404))) {
+          console.warn('[AIMHSA API] 404 on first endpoint, trying next');
           continue;
         }
-        // If not a 404 or this is the last endpoint, throw the error
         throw error;
       }
     }
-    // If we get here, all endpoints failed
     throw lastError || new Error('All API endpoints failed');
   }
 
@@ -516,13 +452,13 @@
     queryInput.value = "";
     autoResizeTextarea(); // Reset textarea height
     
+    const payload = { id: convId, query, history: [] };
+    if (account) payload.account = account;
+    const model = getSelectedModel();
+    if (model) payload.model = model;
+    console.log('[AIMHSA] Sending /ask to', (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) ? API_BASE_URL : window.location.origin, 'query:', query.substring(0, 60));
+
     try {
-      // include account so server can bind new convs to the logged-in user
-      const payload = { id: convId, query, history: [] };
-      if (account) payload.account = account;
-      const model = getSelectedModel();
-      if (model) payload.model = model;
-      
       const resp = await api("/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -530,7 +466,11 @@
       });
       
       removeTypingIndicator();
-      
+
+      if (resp.answer && resp.answer.indexOf("rephrase your question") !== -1) {
+        console.warn("[AIMHSA] Server returned 200 but answer is the generic fallback. AI may be unavailable or key not used.");
+      }
+
       // Handle scope rejection with special styling
       if (resp.scope_rejection) {
         const botMessage = appendMessage("assistant", resp.answer);
@@ -590,19 +530,21 @@
       // refresh server-side conversation list for signed-in users
       if (account) await updateHistoryList();
     } catch (err) {
-      console.error("ask error", err);
+      console.error("[AIMHSA] /ask error:", err);
+      console.error("[AIMHSA] message:", err && err.message);
+      console.error("[AIMHSA] status:", err && err.status);
+      console.error("[AIMHSA] body:", err && err.body);
       removeTypingIndicator();
-      
-      // Provide helpful error message based on error type
-      let errorMessage = "I'm having trouble connecting to the server. Please check your internet connection and try again.";
-      
-      if (err.message && err.message.includes('405')) {
-        errorMessage = "There's a server configuration issue. Please try refreshing the page or contact support.";
-      } else if (err.message && err.message.includes('500')) {
-        errorMessage = "The server encountered an error. Please try again in a moment.";
-      }
-      
-      appendMessage("bot", errorMessage);
+
+      var errorDetail = (err && err.message) ? String(err.message) : String(err);
+      if (err && err.status) errorDetail = "HTTP " + err.status + ": " + errorDetail;
+      if (err && err.body) errorDetail += "\n\nResponse: " + (err.body ? err.body.substring(0, 500) : "(empty)");
+
+      var userMsg = "Could not reach the server. Open browser console (F12 → Console) for details.";
+      if (err && err.status === 500) userMsg = "Server error (500). Check server terminal and browser console.";
+      if (err && err.message && (err.message.indexOf("Failed to fetch") !== -1 || err.message.indexOf("NetworkError") !== -1)) userMsg = "Network error. Is the server running?";
+
+      appendMessage("bot", userMsg + "\n\n[Debug] " + errorDetail);
     } finally {
       disableComposer(false);
     }

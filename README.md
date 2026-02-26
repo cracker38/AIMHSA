@@ -36,6 +36,30 @@ HDEV_SMS_API_KEY=your_api_key
 python run_aimhsa.py
 ```
 
+## Hugging Face Spaces
+
+### Run Docker image locally
+```bash
+docker run -it -p 7860:7860 --platform=linux/amd64 \
+  registry.hf.space/cypadiltd-aimhsa-chatbot:latest
+```
+
+### Get container logs (SSE)
+```bash
+curl -N \
+  -H "Authorization: Bearer $HF_TOKEN" \
+  "https://huggingface.co/api/spaces/CYPADILtd/aimhsa-chatbot/logs/run"
+```
+
+### Get build logs (SSE)
+```bash
+curl -N \
+  -H "Authorization: Bearer $HF_TOKEN" \
+  "https://huggingface.co/api/spaces/CYPADILtd/aimhsa-chatbot/logs/build"
+```
+
+> Set `HF_TOKEN` to your Hugging Face token before running the curl commands.
+
 ## Requirements
 
 - Python 3.9+

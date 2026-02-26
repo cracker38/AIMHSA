@@ -11,11 +11,16 @@ import smtplib
 import secrets
 import math
 import traceback
+
+# Load .env from project root first so OLLAMA_API_KEY etc. are available to all imports
+from dotenv import load_dotenv
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(dotenv_path=_env_path, override=True)
+
 from flask import Flask, request, jsonify, send_from_directory, render_template, redirect
 from flask_cors import CORS
 # Replace direct ollama import with OpenAI client
 from openai import OpenAI
-from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from werkzeug.utils import secure_filename
@@ -35,7 +40,7 @@ except ImportError:
 from config import current_config
 import requests
 
-# Initialize Hugging Face AI service
+# Initialize Hugging Face AI service (after .env is loaded)
 from hf_ai_service import get_ai_service
 ai_service = get_ai_service()
 
@@ -1675,32 +1680,19 @@ def get_professional_by_id(professional_id: int) -> Optional[Dict]:
 def healthz():
     return {"ok": True}
 
-@app.get("/api/config-status")
-def config_status():
-    """Diagnostic endpoint to check configuration status"""
-    import os
+@app.get("/api/ai-status")
+def api_ai_status():
+    """Check if the AI service is configured and ready (for debugging)."""
     from hf_ai_service import get_ai_service
-    
-    ollama_key = os.getenv('OLLAMA_API_KEY', '')
-    ai_service = get_ai_service()
-    
-    status = {
+    svc = get_ai_service()
+    key_set = bool((os.getenv("OLLAMA_API_KEY") or "").strip())
+    return {
         "ok": True,
-        "ai_service": {
-            "available": ai_service.is_available() if ai_service else False,
-            "api_key_set": bool(ollama_key),
-            "api_key_length": len(ollama_key) if ollama_key else 0,
-            "base_url": os.getenv('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1'),
-            "chat_model": os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
-        },
-        "environment": {
-            "flask_env": os.getenv('FLASK_ENV', 'development'),
-            "debug": os.getenv('DEBUG', 'False').lower() == 'true'
-        },
-        "message": "AI Service is working!" if (ai_service and ai_service.is_available()) else "AI Service needs OLLAMA_API_KEY environment variable"
+        "ai_available": svc.is_available(),
+        "api_key_set": key_set,
+        "base_url": os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1"),
+        "model": os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct"),
     }
-    
-    return jsonify(status)
 
 @app.get("/debug/login")
 def debug_login():
@@ -1720,6 +1712,15 @@ def debug_login():
 
 # initialize DB on startup
 init_storage()
+
+# Log AI service status at startup
+try:
+    if ai_service.is_available():
+        print("AI service: ready (OpenRouter/Ollama)")
+    else:
+        print("AI service: NOT available - set OLLAMA_API_KEY in .env for real AI responses")
+except Exception:
+    pass
 
 # --- helper to normalize older saved "user_prompt" shapes so we don't re-save CONTEXT ---
 def _extract_question_from_prompt(content: str) -> str:
@@ -1849,6 +1850,31 @@ Kumbuka: Wewe ni mfumo wa kitaaluma wa msaada wa afya ya akili ulioundwa kutoa m
     }
     
     return prompts.get(target_language, prompts['en'])
+
+# Fallback text returned by AI service when API is unavailable or fails (used to detect and replace with welcome for greetings)
+AI_SERVICE_FALLBACK_EN = "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703."
+
+def _is_simple_greeting(query: str) -> bool:
+    """Return True if the user message is a simple greeting (hello, hi, etc.)."""
+    if not query or not isinstance(query, str):
+        return False
+    q = query.strip().lower()
+    if not q:
+        return False
+    greetings = (
+        "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+        "bonjour", "salut", "coucou", "muraho", "salut", "jambo", "habari",
+        "hola", "yo", "hi there", "hey there", "hello there"
+    )
+    return q in greetings or q.rstrip("!?.") in greetings
+
+# Language-specific welcome messages for greetings (when AI returns fallback or short answer)
+WELCOME_RESPONSES = {
+    'en': "Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? You can share what's on your mind, or ask about coping strategies, stress, or local resources. If you need immediate help, contact the Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
+    'fr': "Bonjour! Je suis AIMHSA, votre compagnon de santé mentale pour le Rwanda. Comment puis-je vous aider aujourd'hui? Vous pouvez partager ce qui vous préoccupe ou poser des questions sur le stress, les stratégies d'adaptation ou les ressources locales. Pour une aide immédiate, contactez la ligne d'assistance en santé mentale au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
+    'rw': "Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'ubuhanga wo mu Rwanda. Nakora iki ngo ngufashe uyu munsi? Ushobora kugira icyo uvuga cyangwa kubaza ibijyanye n'umunaniro, uburyo bwo kwifasha, cyangwa ibikoresho byo mu Rwanda. Niba ukeneye ubufasha bwihuse, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
+    'sw': "Jambo! Mimi ni AIMHSA, mwenzako wa afya ya akili wa Rwanda. Nawezaje kukusaidia leo? Unaweza kushiriki unachofikiria au kuuliza kuhusu mbinu za kukabiliana, mafadhaiko, au rasilimali za ndani. Kwa msaada wa haraka, piga simu ya Ligne d'assistance en santé mentale 105 au CARAES Ndera Hospital +250 788 305 703.",
+}
 
 def determine_target_language(current_query: str, server_history: List[Dict], max_history_samples: int = 5) -> Dict[str, Any]:
     """
@@ -1986,6 +2012,22 @@ def ask():
 
     # load server-side history for this conv_id
     server_history = load_history(conv_id)
+
+    # Simple greetings: return welcome immediately without calling the AI (guarantees correct response)
+    if _is_simple_greeting(query):
+        target_info = determine_target_language(query, server_history)
+        target_language = target_info.get("language", "en")
+        welcome = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
+        save_message(conv_id, "user", query)
+        save_message(conv_id, "assistant", welcome)
+        return jsonify({
+            "answer": welcome,
+            "sources": [],
+            "id": conv_id,
+            "language_detection": target_info,
+            "risk_assessment": {"risk_level": "low", "risk_score": 0.0, "detected_indicators": []},
+            **({"new": True} if new_conv else {})
+        })
 
     # load attachments for this conv_id (won't be persisted into messages table;
     # attachments are provided as separate CONTEXT blocks to the model)
@@ -2175,30 +2217,27 @@ CONTEXT:
         
         # Generate response using Hugging Face model
         answer = ai_service.generate_response(messages)
-        app.logger.info(f"Hugging Face response received: {answer[:100]}...")
+        app.logger.info(f"Hugging Face response received: {answer[:100] if answer else ''}...")
         
-        # Check if answer is empty or too short
-        if not answer or len(answer.strip()) < 10:
+        # When AI returns the generic fallback (e.g. API unavailable), give a proper welcome for simple greetings
+        is_fallback = answer and ("rephrase your question" in (answer or "").lower() or answer.strip() == AI_SERVICE_FALLBACK_EN)
+        if is_fallback and _is_simple_greeting(query):
+            answer = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
+            app.logger.info("Replaced fallback with welcome response for greeting.")
+        
+        # Check if answer is empty or too short - use welcome or generic fallback
+        if not answer or not isinstance(answer, str) or len(answer.strip()) < 10:
             app.logger.warning(f"Answer too short or empty: '{answer}'")
-            # Provide a helpful default response
-            if target_language == 'en':
-                answer = f"Hello! I'm AIMHSA, your mental health companion for Rwanda. How can I support you today? If you need immediate help, contact the Mental Health Hotline at 105."
-            elif target_language == 'fr':
-                answer = f"Bonjour! Je suis AIMHSA, votre compagnon de santé mentale pour le Rwanda. Comment puis-je vous aider aujourd'hui? Pour une aide immédiate, contactez la ligne d'assistance en santé mentale au 105."
-            elif target_language == 'rw':
-                answer = f"Muraho! Nitwa AIMHSA, umufasha wawe w'ubuzima bw'ubwoba bw'ubuhanga wo mu Rwanda. Nakora iki ngo ngufashe uyu munsi? Niba ukeneye ubufasha bwihuse, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe ku 105."
-        if not isinstance(answer, str) or not answer.strip():
-            app.logger.warning("Empty answer received, using language-specific fallback")
-            
-            # Language-specific fallback responses
-            fallback_responses = {
-                'en': "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
-                'fr': "Je suis là pour vous aider. Pourriez-vous reformuler votre question? En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
-                'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
-                'sw': "Niko hapa kusaidia. Tafadhali rudia swali lako? Kwa dharura, piga simu ya Ligne d'assistance en santé mentale ya Rwanda 105 au CARAES Ndera Hospital +250 788 305 703."
-            }
-            
-            answer = fallback_responses.get(target_language, fallback_responses['en'])
+            if _is_simple_greeting(query):
+                answer = WELCOME_RESPONSES.get(target_language, WELCOME_RESPONSES['en'])
+            else:
+                fallback_responses = {
+                    'en': "I'm here to help. Could you please rephrase your question? If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
+                    'fr': "Je suis là pour vous aider. Pourriez-vous reformuler votre question? En cas d'urgence, contactez la ligne d'assistance en santé mentale du Rwanda au 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
+                    'rw': "Ndi hano kugira ngo nkufashe. Murakoze muvugurure icyibazo cyanyu? Ku bihano, hamagara umurongo wa telefone w'ubufasha mu by'ubuzima bwo mu mutwe w'u Rwanda ku 105 cyangwa CARAES Ndera Hospital ku +250 788 305 703.",
+                    'sw': "Niko hapa kusaidia. Tafadhali rudia swali lako? Kwa dharura, piga simu ya Ligne d'assistance en santé mentale ya Rwanda 105 au CARAES Ndera Hospital +250 788 305 703."
+                }
+                answer = fallback_responses.get(target_language, fallback_responses['en'])
         else:
             app.logger.info(f"Got valid answer: {answer[:50]}...")
             
