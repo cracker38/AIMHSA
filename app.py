@@ -1691,7 +1691,7 @@ def api_ai_status():
         "ai_available": svc.is_available(),
         "api_key_set": key_set,
         "base_url": os.getenv("OLLAMA_BASE_URL", "https://openrouter.ai/api/v1"),
-        "model": os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct"),
+        "model": os.getenv("CHAT_MODEL", "meta-llama/llama-3.1-8b-instruct:free"),
     }
 
 @app.get("/debug/login")
