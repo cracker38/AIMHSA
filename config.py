@@ -28,8 +28,8 @@ class Config:
     OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1')
     OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY', '')
     
-    # AI Models (OpenRouter defaults)
-    CHAT_MODEL = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct')
+    # AI Models (OpenRouter: use :free for no-credit tier)
+    CHAT_MODEL = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
     EMBED_MODEL = os.getenv('EMBED_MODEL', 'openai/text-embedding-3-small')
     SENT_EMBED_MODEL = os.getenv('SENT_EMBED_MODEL', 'openai/text-embedding-3-small')
     
