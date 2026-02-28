@@ -41,7 +41,7 @@ from config import current_config
 import requests
 
 # Initialize Hugging Face AI service (after .env is loaded)
-from hf_ai_service import get_ai_service
+from hf_ai_service import get_ai_service, AUTH_ERROR_SENTINEL
 ai_service = get_ai_service()
 
 # --- Minimal retry helpers for OpenAI calls ---
@@ -2224,9 +2224,20 @@ CONTEXT:
         answer = ai_service.generate_response(messages)
         app.logger.info(f"Hugging Face response received: {answer[:100] if answer else ''}...")
         
+        # 401: OpenRouter key invalid or expired — show clear fix instructions
+        if answer and isinstance(answer, str) and answer.strip() == AUTH_ERROR_SENTINEL:
+            app.logger.warning("OpenRouter API key rejected (401); prompting user to fix secret")
+            auth_fix = {
+                'en': "The OpenRouter API key for this app is invalid or expired. To fix: open your Hugging Face Space → Settings → Repository secrets → set OLLAMA_API_KEY to a valid key from https://openrouter.ai/keys (copy the key with no extra spaces or newlines), then restart the Space. If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",
+                'fr': "La clé API OpenRouter de cette application est invalide ou expirée. Pour corriger : ouvrez votre Space Hugging Face → Paramètres → Repository secrets → définissez OLLAMA_API_KEY avec une clé valide depuis https://openrouter.ai/keys (sans espaces ni retours à la ligne), puis redémarrez le Space. En cas d'urgence, contactez le 105 ou l'hôpital CARAES Ndera au +250 788 305 703.",
+                'rw': "Ukuryo rwa API rwa OpenRouter kuri iyi app ntabwo rukora cyangwa rwarasaze. Kugira ngo ukosore: fungura Space yawe ya Hugging Face → Settings → Repository secrets → shira OLLAMA_API_KEY ku kuryo gukora kuva https://openrouter.ai/keys, hanyuma usubize Space. Ku bihano, hamagara 105 cyangwa CARAES Ndera Hospital +250 788 305 703.",
+                'sw': "Ufunguo wa API wa OpenRouter kwa programu huu haufanyi kazi au umekwisha. Ili kurekebisha: fungua Space yako ya Hugging Face → Settings → Repository secrets → weka OLLAMA_API_KEY kwa ufunguo halali kutoka https://openrouter.ai/keys, kisha uanzisha upya Space. Kwa dharura, piga 105 au CARAES Ndera Hospital +250 788 305 703."
+            }
+            answer = auth_fix.get(target_language, auth_fix['en'])
         # Check if answer is empty, too short, or is the generic fallback (API failed)
-        is_fallback = answer and ("rephrase your question" in (answer or "").lower() or answer.strip() == AI_SERVICE_FALLBACK_EN)
-        if not answer or not isinstance(answer, str) or len(answer.strip()) < 10 or is_fallback:
+        elif not answer or not isinstance(answer, str) or len(answer.strip()) < 10 or (
+            answer and ("rephrase your question" in (answer or "").lower() or answer.strip() == AI_SERVICE_FALLBACK_EN)
+        ):
             app.logger.warning("API returned empty/short/fallback - AI may be unavailable or key invalid")
             fallback_responses = {
                     'en': "The AI service isn't responding right now. Please try again in a moment. If this is an emergency, contact Rwanda's Mental Health Hotline at 105 or CARAES Ndera Hospital at +250 788 305 703.",

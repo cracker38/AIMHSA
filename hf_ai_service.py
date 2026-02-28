@@ -9,6 +9,9 @@ from openai import OpenAI
 from typing import List, Dict, Optional
 import logging
 
+# Sentinel returned when OpenRouter rejects the API key (401)
+AUTH_ERROR_SENTINEL = "AIMHSA_AUTH_ERROR"
+
 # Load .env from project root so OLLAMA_API_KEY is set when this module is imported
 try:
     from dotenv import load_dotenv
@@ -82,6 +85,16 @@ class HuggingFaceAIService:
                     continue
                 return self._get_fallback_response()
             except Exception as e:
+                err_str = str(e).lower()
+                is_401 = (
+                    "401" in err_str
+                    or "user not found" in err_str
+                    or "authentication" in err_str
+                    or (hasattr(e, "response") and getattr(e.response, "status_code", None) == 401)
+                )
+                if is_401:
+                    self.logger.warning("OpenRouter returned 401 - API key invalid or expired")
+                    return AUTH_ERROR_SENTINEL
                 self.logger.warning("API call failed (attempt %d): %s", attempt + 1, str(e))
                 if attempt == 0:
                     import time
