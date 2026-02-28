@@ -41,7 +41,18 @@ class HuggingFaceAIService:
                 self.openai_client = None
                 return
             
-            self.openai_client = OpenAI(base_url=base_url, api_key=api_key)
+            # OpenRouter recommends these headers (optional but can help with server-side/cloud requests)
+            is_openrouter = "openrouter.ai" in base_url.lower()
+            default_headers = {}
+            if is_openrouter:
+                app_url = (os.getenv("APP_URL") or os.getenv("SPACE_URL") or "https://cypadiltd-aimhsa-chatbot.hf.space").strip()
+                default_headers["HTTP-Referer"] = app_url
+                default_headers["X-Title"] = "AIMHSA"
+            self.openai_client = OpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                default_headers=default_headers if default_headers else None,
+            )
             self.logger.info("AI client initialized (OpenRouter/Ollama). Base URL: %s", base_url)
             
         except Exception as e:

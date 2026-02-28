@@ -147,10 +147,15 @@ HDEV_SMS_API_KEY = current_config.HDEV_SMS_API_KEY
 # --- Human verification ---
 HUMAN_CHECK_KEYWORD = os.getenv("HUMAN_CHECK_KEYWORD", "aimhsa").lower()
 
-# --- OpenAI Client Configuration ---
+# --- OpenAI Client Configuration (OpenRouter headers can help with server-side/cloud 401s) ---
+_openrouter_headers = {}
+if current_config.OLLAMA_API_KEY and "openrouter.ai" in (current_config.OLLAMA_BASE_URL or "").lower():
+    _openrouter_headers["HTTP-Referer"] = (os.getenv("APP_URL") or os.getenv("SPACE_URL") or "https://cypadiltd-aimhsa-chatbot.hf.space").strip()
+    _openrouter_headers["X-Title"] = "AIMHSA"
 openai_client = OpenAI(
     base_url=current_config.OLLAMA_BASE_URL,
-    api_key=current_config.OLLAMA_API_KEY
+    api_key=current_config.OLLAMA_API_KEY,
+    default_headers=_openrouter_headers if _openrouter_headers else None,
 )
 
 def send_password_reset_email(to_email, username, reset_code):
