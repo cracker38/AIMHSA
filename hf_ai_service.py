@@ -27,11 +27,12 @@ class HuggingFaceAIService:
         """Initialize OpenAI-compatible client for OpenRouter/Ollama"""
         try:
             base_url = (os.getenv("OLLAMA_BASE_URL") or "https://openrouter.ai/api/v1").strip()
-            api_key = (os.getenv("OLLAMA_API_KEY") or "").strip()
+            # Support both names: OLLAMA_API_KEY (local) and OPENROUTER_API_KEY (common on HF Space)
+            api_key = (os.getenv("OLLAMA_API_KEY") or os.getenv("OPENROUTER_API_KEY") or "").strip()
             
             if not api_key:
                 self.logger.warning(
-                    "OLLAMA_API_KEY is not set. Set it in .env for AI responses. "
+                    "OLLAMA_API_KEY (or OPENROUTER_API_KEY) is not set. Set it in .env or Space secrets. "
                     "Using fallback for all messages until then."
                 )
                 self.openai_client = None
