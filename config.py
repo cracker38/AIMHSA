@@ -24,9 +24,9 @@ class Config:
     # Database Configuration
     DB_FILE = os.getenv('DB_FILE', 'storage/conversations.db')
     
-    # Ollama/OpenRouter Configuration
-    OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'https://openrouter.ai/api/v1')
-    OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY', '')
+    # Ollama/OpenRouter Configuration (OPENROUTER_API_KEY fallback for HF Space)
+    OLLAMA_BASE_URL = (os.getenv('OLLAMA_BASE_URL') or 'https://openrouter.ai/api/v1').strip()
+    OLLAMA_API_KEY = (os.getenv('OLLAMA_API_KEY') or os.getenv('OPENROUTER_API_KEY') or '').strip()
     
     # AI Models (OpenRouter: use :free for no-credit tier)
     CHAT_MODEL = os.getenv('CHAT_MODEL', 'meta-llama/llama-3.1-8b-instruct:free')
